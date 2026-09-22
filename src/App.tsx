@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { Navbar } from '@/components/Navbar';
 import { ParticleBackground } from '@/components/ParticleBackground';
@@ -35,12 +35,36 @@ function App() {
   const [deviceViews, setDeviceViews] = useState<number>(() => {
     if (typeof window === 'undefined') return 0;
     const saved = Number(localStorage.getItem(DEVICE_VIEWS_KEY) ?? '0');
-    const nextValue = Number.isFinite(saved) && saved > 0 ? saved : 0;
-    localStorage.setItem(DEVICE_VIEWS_KEY, String(nextValue + 1));
-    return nextValue + 1;
+    return Number.isFinite(saved) && saved >= 0 ? saved : 0;
   });
   const [view, setView] = useState<View>('home');
   const [result, setResult] = useState<SensitivityResult | null>(loadResult());
+  const hasTrackedView = useRef(false);
+
+  useEffect(() => {
+    if (hasTrackedView.current || typeof window === 'undefined') return;
+    hasTrackedView.current = true;
+
+    const syncViewCount = async () => {
+      try {
+        const response = await fetch('https://api.countapi.xyz/hit/raiden-sensei-website/visits');
+        if (!response.ok) throw new Error('Failed to increment remote counter');
+
+        const data = await response.json();
+        const count = Number(data?.value ?? 0);
+
+        localStorage.setItem(DEVICE_VIEWS_KEY, String(count));
+        setDeviceViews(count);
+      } catch {
+        const saved = Number(localStorage.getItem(DEVICE_VIEWS_KEY) ?? '0');
+        const currentCount = Number.isFinite(saved) && saved >= 0 ? saved : 0;
+        localStorage.setItem(DEVICE_VIEWS_KEY, String(currentCount));
+        setDeviceViews(currentCount);
+      }
+    };
+
+    syncViewCount();
+  }, []);
 
   const handleNavigate = (id: string) => {
     if (id === 'home') setView('home');
@@ -109,7 +133,12 @@ function App() {
             <p className="font-mono text-[10px] uppercase tracking-[0.45em] text-cyan-300">Access Required</p>
             <h1 className="mt-4 font-display text-3xl font-bold text-white">Enter code</h1>
             <div className="mt-3 inline-flex items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 font-mono text-xs text-cyan-200 shadow-lg shadow-cyan-500/10">
-              <span className="flex h-6 w-6 items-center justify-center rounded-md border border-cyan-400/50 bg-slate-950/80 text-[10px]" aria-hidden="true">👁</span>
+              <span className="flex h-6 w-6 items-center justify-center rounded-md border border-cyan-400/50 bg-slate-950/80" aria-hidden="true">
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </span>
               <span>Views: {deviceViews}</span>
             </div>
           </div>
@@ -119,16 +148,19 @@ function App() {
 
             <div className="space-y-2 font-mono text-[11px]">
               <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2">
-                <span className="text-slate-400">Account Number:</span>
+                <span className="min-w-0 flex-1 text-slate-400">Account Number:</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-white">8033240323</span>
+                  <span className="text-right text-white">8033240323</span>
                   <button
                     type="button"
                     onClick={() => handleCopy('8033240323')}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-cyan-400/40 bg-cyan-500/10 text-base text-cyan-300"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-cyan-400/40 bg-cyan-500/10 text-cyan-300 transition hover:bg-cyan-500/20"
                     aria-label="Copy account number"
                   >
-                    ⧉
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <rect x="9" y="9" width="11" height="11" rx="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
                   </button>
                 </div>
               </div>
@@ -183,11 +215,17 @@ function App() {
     <div className="relative min-h-screen">
       <ParticleBackground />
       <div className="relative z-10">
-        <div className="absolute right-4 top-4 z-20 inline-flex items-center gap-2 rounded-xl border border-cyan-500/30 bg-slate-950/80 px-3 py-2 text-sm text-cyan-200 shadow-lg shadow-cyan-500/10">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-cyan-400/50 bg-slate-900/80 text-[10px]" aria-hidden="true">👁</span>
+        <Navbar onNavigate={handleNavigate} />
+
+        <div className="fixed bottom-4 left-1/2 z-30 -translate-x-1/2 inline-flex items-center gap-2 rounded-xl border border-cyan-500/30 bg-slate-950/80 px-3 py-2 text-sm text-cyan-200 shadow-lg shadow-cyan-500/10">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-cyan-400/50 bg-slate-900/80" aria-hidden="true">
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          </span>
           <span>{deviceViews}</span>
         </div>
-        <Navbar onNavigate={handleNavigate} />
 
         <main>
           {view === 'home' && (
