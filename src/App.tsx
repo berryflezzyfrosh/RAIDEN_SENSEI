@@ -145,6 +145,9 @@ function App() {
 
           <div className="mb-6 rounded-xl border border-cyan-500/30 bg-slate-950/60 p-4 text-sm text-slate-200">
             <p className="mb-3 font-display text-base font-semibold text-cyan-300">Payment Details</p>
+            <p className="mb-3 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 font-mono text-xs text-cyan-200">
+              Amount: ₦2,000
+            </p>
 
             <div className="space-y-2 font-mono text-[11px]">
               <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2">
