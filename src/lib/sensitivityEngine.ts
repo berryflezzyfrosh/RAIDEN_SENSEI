@@ -1,4 +1,4 @@
-import type { DeviceInfo, UserInputs, SensitivityResult, PlayStyle, PerformanceTier } from './types';
+import type { DeviceInfo, UserInputs, SensitivityResult, PlayStyle, PerformanceTier, ConfigFactor } from './types';
 import { getDevicePerformanceTier } from './deviceDetection';
 
 function clamp(v: number, min: number, max: number): number {
@@ -14,23 +14,29 @@ function hashString(str: string): number {
   return Math.abs(hash);
 }
 
-function playStyleMultiplier(style: PlayStyle): {
+interface StyleProfile {
   general: number;
   scope: number;
   sniper: number;
   freeLook: number;
   fire: number;
-} {
-  switch (style) {
-    case 'aggressive': return { general: 1.15, scope: 1.05, sniper: 0.9, freeLook: 1.2, fire: 1.1 };
-    case 'headshot':   return { general: 0.95, scope: 0.9, sniper: 0.85, freeLook: 1.0, fire: 0.95 };
-    case 'dragshot':   return { general: 1.1, scope: 1.0, sniper: 0.95, freeLook: 1.15, fire: 1.05 };
-    case 'closerange': return { general: 1.2, scope: 0.95, sniper: 0.8, freeLook: 1.1, fire: 1.15 };
-    case 'longrange':  return { general: 0.9, scope: 0.85, sniper: 0.95, freeLook: 0.9, fire: 0.9 };
-    case 'sniper':     return { general: 0.85, scope: 0.8, sniper: 0.7, freeLook: 0.85, fire: 0.85 };
-    case 'custom':     return { general: 1.0, scope: 1.0, sniper: 1.0, freeLook: 1.0, fire: 1.0 };
-    default:           return { general: 1.0, scope: 1.0, sniper: 1.0, freeLook: 1.0, fire: 1.0 };
-  }
+  aimStyle: string;
+  dragStyle: string;
+  recommendedStyle: string;
+}
+
+function getStyleProfile(style: PlayStyle): StyleProfile {
+  const profiles: Record<PlayStyle, StyleProfile> = {
+    aggressive: { general: 1.15, scope: 1.05, sniper: 0.9, freeLook: 1.2, fire: 1.1, aimStyle: 'Fast-Flick', dragStyle: 'Quick Drag', recommendedStyle: 'Aggressive Rush' },
+    headshot:   { general: 0.95, scope: 0.9, sniper: 0.85, freeLook: 1.0, fire: 0.95, aimStyle: 'Micro-Flick', dragStyle: 'Two-Finger Drag', recommendedStyle: 'Headshot Aim' },
+    dragshot:   { general: 1.1, scope: 1.0, sniper: 0.95, freeLook: 1.15, fire: 1.05, aimStyle: 'Drag-Flick', dragStyle: 'One-Finger Drag', recommendedStyle: 'Drag Headshot' },
+    closerange: { general: 1.2, scope: 0.95, sniper: 0.8, freeLook: 1.1, fire: 1.15, aimStyle: 'Hip-Fire Drag', dragStyle: 'Quick Drag', recommendedStyle: 'Close Combat' },
+    longrange:  { general: 0.9, scope: 0.85, sniper: 0.95, freeLook: 0.9, fire: 0.9, aimStyle: 'Steady Aim', dragStyle: 'Controlled Drag', recommendedStyle: 'Long Range' },
+    sniper:     { general: 0.85, scope: 0.8, sniper: 0.7, freeLook: 0.85, fire: 0.85, aimStyle: 'Precision Tap', dragStyle: 'Slow Precision Drag', recommendedStyle: 'Sniper Precision' },
+    custom:     { general: 1.0, scope: 1.0, sniper: 1.0, freeLook: 1.0, fire: 1.0, aimStyle: 'Steady Aim', dragStyle: 'Controlled Drag', recommendedStyle: 'Custom' },
+    balanced:   { general: 1.0, scope: 1.0, sniper: 1.0, freeLook: 1.0, fire: 1.0, aimStyle: 'Steady Aim', dragStyle: 'Controlled Drag', recommendedStyle: 'Balanced' },
+  };
+  return profiles[style];
 }
 
 export function generateSensitivity(
@@ -38,46 +44,60 @@ export function generateSensitivity(
   inputs: UserInputs
 ): SensitivityResult {
   const tier = getDevicePerformanceTier(device);
-  const styleMul = playStyleMultiplier(inputs.playStyle);
+  const style = getStyleProfile(inputs.playStyle);
+  const factors: ConfigFactor[] = [];
 
-  // Base sensitivity from device characteristics
-  const screenDiagonal = Math.sqrt(
-    device.screenWidth ** 2 + device.screenHeight ** 2
-  );
-  const pixelDensity = (device.pixelRatio * 160) / 3.0; // approx DPI estimate
+  // --- Screen factor ---
+  // Larger physical screens need slightly lower sensitivity for equivalent control.
+  // We approximate screen size from resolution and pixel ratio.
+  const screenDiagonalPx = Math.sqrt(device.screenWidth ** 2 + device.screenHeight ** 2);
+  const approxPhysicalDiagonal = screenDiagonalPx / (device.pixelRatio * 160);
+  const screenFactor = Math.max(0.92, Math.min(1.08, 5.5 / Math.max(approxPhysicalDiagonal, 3)));
+  factors.push({
+    name: 'Screen Size',
+    value: `${device.screenWidth}×${device.screenHeight} (${approxPhysicalDiagonal.toFixed(1)}")`,
+    impact: 'high',
+  });
+
+  // --- Pixel ratio / DPI factor ---
+  let userDpi = 0;
+  if (inputs.dpi) userDpi = parseInt(inputs.dpi, 10) || 0;
+  const estimatedDpi = Math.round(device.pixelRatio * 160);
+  const effectiveDpi = userDpi || estimatedDpi;
+  const dpiFactor = Math.max(0.9, Math.min(1.1, 400 / Math.max(effectiveDpi, 200)));
+  factors.push({
+    name: 'Pixel Density',
+    value: `${device.pixelRatio.toFixed(1)}x (~${effectiveDpi} DPI)`,
+    impact: 'high',
+  });
+
+  // --- Touch factor ---
   const touchFactor = device.touchSupported ? 1.0 : 0.85;
+  factors.push({
+    name: 'Touch Support',
+    value: device.touchSupported ? `Yes (${device.maxTouchPoints} points)` : 'No',
+    impact: 'high',
+  });
 
-  // Performance-based base
-  const tierBase: Record<PerformanceTier, number> = {
-    Low: 85,
-    Mid: 90,
-    High: 95,
-    Ultra: 98,
-  };
-
-  // Seed from device identity for consistency
-  const seed = hashString(
-    device.deviceName + device.os + device.screenWidth + device.screenHeight + device.pixelRatio
-  );
-  const seedNoise = ((seed % 100) / 100 - 0.5) * 6; // ±3 noise
-
-  // Screen size factor: larger screens → slightly lower general sens
-  const screenFactor = Math.max(0.92, Math.min(1.08, 1080 / Math.max(device.screenWidth, 400)));
-
-  // Refresh rate factor
+  // --- Refresh rate factor ---
   let refreshRate = device.refreshRate;
   if (!refreshRate && inputs.refreshRate) {
     refreshRate = parseInt(inputs.refreshRate, 10) || null;
   }
   const refreshFactor = refreshRate && refreshRate >= 90 ? 1.03 : refreshRate && refreshRate >= 60 ? 1.0 : 0.97;
+  if (refreshRate) {
+    factors.push({ name: 'Refresh Rate', value: `${refreshRate} Hz`, impact: 'medium' });
+  }
 
-  // DPI factor
-  let userDpi = 0;
-  if (inputs.dpi) userDpi = parseInt(inputs.dpi, 10) || 0;
-  const effectiveDpi = userDpi || Math.round(pixelDensity * device.pixelRatio);
-  const dpiFactor = Math.max(0.9, Math.min(1.1, 400 / Math.max(effectiveDpi, 200)));
+  // --- Performance tier ---
+  const tierBase: Record<PerformanceTier, number> = { Low: 85, Mid: 90, High: 95, Ultra: 98 };
+  factors.push({
+    name: 'Performance Tier',
+    value: `${tier} (${device.hardwareConcurrency ?? '?'} cores, ${device.deviceMemory ?? '?'}GB)`,
+    impact: 'high',
+  });
 
-  // RAM factor
+  // --- RAM factor ---
   let ramFactor = 1.0;
   if (inputs.ram) {
     const ram = parseInt(inputs.ram, 10) || 0;
@@ -85,9 +105,10 @@ export function generateSensitivity(
     else if (ram >= 4) ramFactor = 1.0;
     else if (ram >= 2) ramFactor = 0.95;
     else ramFactor = 0.9;
+    factors.push({ name: 'RAM', value: `${ram} GB`, impact: 'medium' });
   }
 
-  // FPS factor
+  // --- FPS factor ---
   let fpsFactor = 1.0;
   if (inputs.fpsSetting) {
     const fps = parseInt(inputs.fpsSetting, 10) || 0;
@@ -95,54 +116,47 @@ export function generateSensitivity(
     else if (fps >= 60) fpsFactor = 1.02;
     else if (fps >= 40) fpsFactor = 1.0;
     else fpsFactor = 0.95;
+    factors.push({ name: 'FPS Target', value: `${fps} FPS`, impact: 'medium' });
   }
 
+  // --- Device seed for deterministic variation ---
+  const seed = hashString(
+    device.deviceName + device.os + device.screenWidth + 'x' + device.screenHeight + device.pixelRatio
+  );
+  const seedNoise = ((seed % 100) / 100 - 0.5) * 4;
+
+  // --- Composite base ---
   const base = tierBase[tier];
   const composite = base * screenFactor * refreshFactor * dpiFactor * ramFactor * fpsFactor * touchFactor;
 
-  const general = clamp(composite * styleMul.general + seedNoise, 50, 100);
-  const redDot = clamp(composite * 0.88 * styleMul.scope + seedNoise * 0.5, 40, 100);
-  const scope2x = clamp(composite * 0.82 * styleMul.scope + seedNoise * 0.4, 35, 100);
-  const scope4x = clamp(composite * 0.72 * styleMul.scope + seedNoise * 0.3, 30, 95);
-  const sniper = clamp(composite * 0.55 * styleMul.sniper + seedNoise * 0.2, 20, 90);
-  const freeLook = clamp(composite * 1.05 * styleMul.freeLook + seedNoise * 0.6, 50, 100);
+  // --- Sensitivity values ---
+  const general = clamp(composite * style.general + seedNoise, 50, 100);
+  const redDot = clamp(composite * 0.88 * style.scope + seedNoise * 0.5, 40, 100);
+  const scope2x = clamp(composite * 0.82 * style.scope + seedNoise * 0.4, 35, 100);
+  const scope4x = clamp(composite * 0.72 * style.scope + seedNoise * 0.3, 30, 95);
+  const sniper = clamp(composite * 0.55 * style.sniper + seedNoise * 0.2, 20, 90);
+  const freeLook = clamp(composite * 1.05 * style.freeLook + seedNoise * 0.6, 50, 100);
 
-  // Fire button size
+  // --- Fire button ---
   const fireBase = device.touchSupported ? 55 : 45;
-  const fireButtonSize = clamp(fireBase * styleMul.fire + seedNoise * 0.3, 30, 100);
+  const fireButtonSize = clamp(fireBase * style.fire + seedNoise * 0.3, 30, 100);
 
-  // DPI recommendation
+  // --- DPI recommendation ---
   const dpiRec = device.touchSupported
     ? clamp(Math.round(effectiveDpi * 0.9), 280, 620)
     : clamp(Math.round(effectiveDpi * 0.8), 240, 480);
 
-  // FPS recommendation
+  // --- FPS recommendation ---
   const fpsRec = tier === 'Ultra' ? 90 : tier === 'High' ? 65 : tier === 'Mid' ? 45 : 30;
 
-  // Graphics recommendation
+  // --- Graphics recommendation ---
   const graphicsRec =
     tier === 'Ultra' ? 'Ultra' :
     tier === 'High' ? 'Standard' :
-    tier === 'Mid' ? 'Smooth' : 'Smooth';
+    'Smooth';
 
-  // Aim and drag style
-  const aimStyle =
-    inputs.playStyle === 'sniper' ? 'Precision Tap' :
-    inputs.playStyle === 'headshot' ? 'Micro-Flick' :
-    inputs.playStyle === 'dragshot' ? 'Drag-Flick' :
-    inputs.playStyle === 'aggressive' ? 'Fast-Flick' :
-    inputs.playStyle === 'closerange' ? 'Hip-Fire Drag' :
-    'Steady Aim';
-
-  const dragStyle =
-    inputs.playStyle === 'dragshot' ? 'One-Finger Drag' :
-    inputs.playStyle === 'headshot' ? 'Two-Finger Drag' :
-    inputs.playStyle === 'aggressive' ? 'Quick Drag' :
-    inputs.playStyle === 'sniper' ? 'Slow Precision Drag' :
-    'Controlled Drag';
-
-  // Confidence score
-  let confidence = 75;
+  // --- Confidence ---
+  let confidence = 72;
   if (device.hardwareConcurrency) confidence += 5;
   if (device.deviceMemory) confidence += 5;
   if (device.touchSupported) confidence += 4;
@@ -158,17 +172,19 @@ export function generateSensitivity(
     device.maxTouchPoints >= 5 ? 'Standard' :
     device.maxTouchPoints >= 1 ? 'Basic' : 'N/A';
 
-  const recommendedStyle =
-    inputs.playStyle === 'sniper' ? 'Sniper Precision' :
-    inputs.playStyle === 'dragshot' ? 'Drag Headshot' :
-    inputs.playStyle === 'headshot' ? 'Headshot Aim' :
-    inputs.playStyle === 'aggressive' ? 'Aggressive Rush' :
-    inputs.playStyle === 'closerange' ? 'Close Combat' :
-    inputs.playStyle === 'longrange' ? 'Long Range' :
-    'Balanced';
+  // --- Explanation ---
+  const explanationParts: string[] = [];
+  explanationParts.push(`adjusted for your ${approxPhysicalDiagonal.toFixed(1)}" screen`);
+  if (device.touchSupported) explanationParts.push('touch capability');
+  if (refreshRate) explanationParts.push(`${refreshRate}Hz refresh rate`);
+  explanationParts.push(`${tier.toLowerCase()} performance profile`);
+  explanationParts.push(`${inputs.playStyle} play style`);
+  const explanation = `Your configuration was ${explanationParts.join(', ')}.`;
+
+  factors.push({ name: 'Play Style', value: inputs.playStyle, impact: 'high' });
 
   return {
-    deviceName: inputs.phoneModel || device.deviceName,
+    deviceName: inputs.phoneModel || inputs.phoneBrand || device.deviceName,
     profile: tier,
     general,
     redDot,
@@ -180,11 +196,15 @@ export function generateSensitivity(
     dpiRecommendation: dpiRec,
     fpsRecommendation: fpsRec,
     graphicsRecommendation: graphicsRec,
-    aimStyle,
-    dragStyle,
+    aimStyle: style.aimStyle,
+    dragStyle: style.dragStyle,
     confidence,
     performanceProfile: tier,
     touchProfile,
-    recommendedStyle,
+    recommendedStyle: style.recommendedStyle,
+    explanation,
+    factors,
+    playStyle: inputs.playStyle,
+    generatedAt: Date.now(),
   };
 }

@@ -49,6 +49,12 @@ export interface UserInputs {
   playStyle: PlayStyle;
 }
 
+export interface ConfigFactor {
+  name: string;
+  value: string;
+  impact: 'high' | 'medium' | 'low';
+}
+
 export interface SensitivityResult {
   deviceName: string;
   profile: PerformanceTier;
@@ -68,6 +74,10 @@ export interface SensitivityResult {
   performanceProfile: PerformanceTier;
   touchProfile: string;
   recommendedStyle: string;
+  explanation: string;
+  factors: ConfigFactor[];
+  playStyle: PlayStyle;
+  generatedAt: number;
 }
 
 export interface RedeemCode {
@@ -78,17 +88,18 @@ export interface RedeemCode {
   retrievedAt: string;
   status: CodeStatus;
   expiresAt: string | null;
+  region?: string;
 }
 
-export const PLAY_STYLES: { value: PlayStyle; label: string; description: string }[] = [
-  { value: 'balanced', label: 'Balanced', description: 'All-round balanced configuration' },
-  { value: 'aggressive', label: 'Aggressive', description: 'Fast reflexes, high sensitivity' },
-  { value: 'headshot', label: 'Headshot-Focused', description: 'Precision aim control' },
-  { value: 'dragshot', label: 'Drag Shot', description: 'Drag headshot optimization' },
-  { value: 'closerange', label: 'Close Range', description: 'Close-quarters combat' },
-  { value: 'longrange', label: 'Long Range', description: 'Distant engagements' },
-  { value: 'sniper', label: 'Sniper', description: 'Sniper scope precision' },
-  { value: 'custom', label: 'Custom', description: 'Manual fine-tuning' },
+export const PLAY_STYLES: { value: PlayStyle; label: string; description: string; icon: string }[] = [
+  { value: 'balanced', label: 'Balanced', description: 'All-round balanced configuration', icon: 'scale' },
+  { value: 'aggressive', label: 'Aggressive', description: 'Fast reflexes, high sensitivity', icon: 'swords' },
+  { value: 'headshot', label: 'Headshot', description: 'Precision aim control', icon: 'target' },
+  { value: 'dragshot', label: 'Drag Shot', description: 'Drag headshot optimization', icon: 'move' },
+  { value: 'closerange', label: 'Close Range', description: 'Close-quarters combat', icon: 'flame' },
+  { value: 'longrange', label: 'Long Range', description: 'Distant engagements', icon: 'eye' },
+  { value: 'sniper', label: 'Sniper', description: 'Sniper scope precision', icon: 'crosshair' },
+  { value: 'custom', label: 'Custom', description: 'Manual fine-tuning', icon: 'sliders' },
 ];
 
 export const GRAPHICS_OPTIONS = ['Auto', 'Smooth', 'Standard', 'Ultra'];
