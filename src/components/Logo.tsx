@@ -1,66 +1,29 @@
-export function Logo({ size = 48, className = '' }: { size?: number; className?: string }) {
+import { Crosshair } from 'lucide-react';
+import { navigate } from '@/hooks/useRouter';
+
+export function Logo({ size = 36, withText = true }: { size?: number; withText?: boolean }) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 120 120"
-      className={className}
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-label="RΛIDΞN 亗 Sensei logo"
+    <button
+      onClick={() => navigate('home')}
+      className="flex items-center gap-2 btn-press group"
+      aria-label="RΛIDΞN 亗 home"
     >
-      <defs>
-        <linearGradient id="raiden-logo-grad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#00e5ff" />
-          <stop offset="50%" stopColor="#ff2e7e" />
-          <stop offset="100%" stopColor="#ffb800" />
-        </linearGradient>
-        <filter id="raiden-logo-glow">
-          <feGaussianBlur stdDeviation="1.5" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-      </defs>
-      <polygon
-        points="60,8 104,32 104,88 60,112 16,88 16,32"
-        fill="none"
-        stroke="url(#raiden-logo-grad)"
-        strokeWidth="3"
-        filter="url(#raiden-logo-glow)"
-      />
-      <polygon
-        points="60,22 90,38 90,82 60,98 30,82 30,38"
-        fill="none"
-        stroke="url(#raiden-logo-grad)"
-        strokeWidth="1.5"
-        opacity="0.5"
-      />
-      <text
-        x="60"
-        y="58"
-        textAnchor="middle"
-        fontFamily="Orbitron, sans-serif"
-        fontSize="22"
-        fontWeight="900"
-        fill="url(#raiden-logo-grad)"
-        filter="url(#raiden-logo-glow)"
+      <span
+        className="relative inline-flex items-center justify-center rounded-xl text-white shadow-md shadow-orange-500/30"
+        style={{
+          width: size,
+          height: size,
+          background: 'linear-gradient(135deg, #ff6a00 0%, #ff9a3a 100%)',
+        }}
       >
-        RΛIDΞN
-      </text>
-      <text
-        x="60"
-        y="78"
-        textAnchor="middle"
-        fontFamily="Orbitron, sans-serif"
-        fontSize="14"
-        fontWeight="700"
-        fill="#00e5ff"
-        opacity="0.9"
-      >
-        亗 SENSEI
-      </text>
-    </svg>
+        <Crosshair size={size * 0.6} strokeWidth={2.4} />
+        <span className="absolute inset-0 rounded-xl ring-1 ring-white/30" />
+      </span>
+      {withText && (
+        <span className="font-display font-extrabold tracking-tight text-neutral-900 text-lg leading-none">
+          RΛIDΞN <span className="text-gradient-orange">亗</span>
+        </span>
+      )}
+    </button>
   );
 }
