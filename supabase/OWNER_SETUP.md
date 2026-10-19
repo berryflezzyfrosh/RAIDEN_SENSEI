@@ -36,3 +36,5 @@ The repository includes a GitHub Actions workflow for Pages. In the GitHub repos
 - `VITE_SUPABASE_ANON_KEY`: the Supabase publishable/anon key (never use the service-role key here).
 
 Then open **Settings → Pages** and set the build/deployment source to **GitHub Actions**. Push to `main` or run the workflow manually. The workflow fails before deployment if either value is missing, instead of publishing a site that cannot connect to Supabase. Frontend environment values are compiled into the public site; the anon key is designed for public clients and must be protected by RLS, while service-role keys must only be stored as backend secrets.
+
+In the Supabase dashboard, open **Authentication → URL Configuration**. Set the Site URL to `https://berryflezzyfrosh.github.io/RAIDEN_SENSEI/` and add that same URL (and `https://berryflezzyfrosh.github.io/**` if using nested redirects) to the Redirect URLs allowlist. Email confirmation links otherwise may return users to a localhost or unrelated URL.

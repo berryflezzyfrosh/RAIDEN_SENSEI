@@ -5,19 +5,25 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 export const SUPABASE_ANON_KEY = anonKey ?? '';
 export const SUPABASE_URL = url ?? '';
 
-export function getOwnerAuthEndpoint(): string {
+export function getSupabaseConfigError(): string | null {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    throw new Error('This site build is missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. Set both in the hosting provider and rebuild/redeploy the frontend.');
+    return 'This site build is missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. Add both as GitHub Actions repository secrets and rebuild/redeploy the site.';
   }
   let parsed: URL;
   try {
     parsed = new URL(SUPABASE_URL);
   } catch {
-    throw new Error('VITE_SUPABASE_URL is not a valid absolute URL. Set it to your Supabase project URL and rebuild/redeploy the frontend.');
+    return 'VITE_SUPABASE_URL in this site build is not a valid absolute URL. Set it to your Supabase project URL and rebuild/redeploy.';
   }
   if (parsed.protocol !== 'https:' && parsed.hostname !== 'localhost' && parsed.hostname !== '127.0.0.1') {
-    throw new Error('VITE_SUPABASE_URL must use HTTPS for the deployed site.');
+    return 'VITE_SUPABASE_URL in this site build must use HTTPS.';
   }
+  return null;
+}
+
+export function getOwnerAuthEndpoint(): string {
+  const configError = getSupabaseConfigError();
+  if (configError) throw new Error(configError);
   return `${SUPABASE_URL}/functions/v1/owner-auth`;
 }
 

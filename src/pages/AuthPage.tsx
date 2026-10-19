@@ -4,7 +4,7 @@ import { Button, Card } from '@/components/ui';
 import { Logo } from '@/components/Logo';
 import { navigate } from '@/hooks/useRouter';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseConfigError, supabase } from '@/lib/supabase';
 
 export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
   const { refreshProfile } = useAuth();
@@ -29,6 +29,8 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
     }
     setLoading(true);
     try {
+      const configError = getSupabaseConfigError();
+      if (configError) throw new Error(configError);
       if (mode === 'signup') {
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
@@ -53,7 +55,9 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
     } catch (err) {
       const msg = (err as Error).message;
       setError(
-        msg.includes('Invalid login')
+        /failed to fetch|networkerror|load failed/i.test(msg)
+          ? 'Could not reach Supabase Auth. Check your connection and confirm this GitHub Pages build has the correct Supabase URL and anon key.'
+          : msg.includes('Invalid login')
           ? 'Wrong email or password.'
           : msg.includes('already registered')
           ? 'That email is already registered. Try logging in.'
