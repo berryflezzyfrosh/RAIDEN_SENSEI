@@ -1,3 +1,17 @@
+CREATE OR REPLACE FUNCTION public.is_current_user_admin()
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+  SELECT COALESCE((auth.jwt()->'app_metadata'->>'is_admin')::boolean, false)
+    AND EXISTS (
+      SELECT 1 FROM public.user_profiles up
+      WHERE up.id = auth.uid() AND up.account_status = 'active'
+    );
+$$;
+
 CREATE OR REPLACE FUNCTION public.has_premium_access()
 RETURNS boolean
 LANGUAGE sql

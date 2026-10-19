@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Shield, Mail, Lock, Key, AlertCircle, CheckCircle2, Crown } from 'lucide-react';
 import { Card, Button } from '@/components/ui';
 import { Logo } from '@/components/Logo';
-import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase';
+import { getOwnerAuthEndpoint, supabase, SUPABASE_ANON_KEY } from '@/lib/supabase';
 import { navigate } from '@/hooks/useRouter';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -17,6 +17,9 @@ async function readFunctionResponse(response: Response): Promise<OwnerAuthRespon
   try {
     return JSON.parse(body) as OwnerAuthResponse;
   } catch {
+    if (response.status === 405) {
+      throw new Error('Owner auth returned HTTP 405. The deployed site may have the wrong VITE_SUPABASE_URL, or owner-auth is not deployed to that Supabase project. Set the frontend VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, deploy owner-auth, then rebuild/redeploy the site.');
+    }
     const contentType = response.headers.get('content-type') ?? 'unknown content type';
     const preview = body.replace(/\s+/g, ' ').slice(0, 100);
     throw new Error(
@@ -53,7 +56,7 @@ export function AdminLoginPage() {
     setInfo('');
     setLoading(true);
     try {
-      const fnUrl = `${SUPABASE_URL}/functions/v1/owner-auth`;
+      const fnUrl = getOwnerAuthEndpoint();
       if (mode === 'bootstrap') {
         const res = await fetch(fnUrl, {
           method: 'POST',
@@ -124,7 +127,7 @@ export function AdminLoginPage() {
     setInfo('');
     setLoading(true);
     try {
-      const fnUrl = `${SUPABASE_URL}/functions/v1/owner-auth`;
+      const fnUrl = getOwnerAuthEndpoint();
       const res = await fetch(fnUrl, {
         method: 'POST',
           headers: {
