@@ -54,12 +54,19 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
       }
     } catch (err) {
       const msg = (err as Error).message;
+      const normalizedMessage = msg.toLowerCase();
       setError(
         /failed to fetch|networkerror|load failed/i.test(msg)
           ? 'Could not reach Supabase Auth. Check your connection and confirm this GitHub Pages build has the correct Supabase URL and anon key.'
-          : msg.includes('Invalid login')
+          : normalizedMessage.includes('email not confirmed')
+          ? 'Confirm your email using the link Supabase sent you, then log in.'
+          : normalizedMessage.includes('database error saving new user') ||
+            normalizedMessage.includes('user_profiles') ||
+            normalizedMessage.includes('schema cache')
+          ? 'This Supabase project is missing the app database setup. Apply all project migrations, then try creating the account again.'
+          : normalizedMessage.includes('invalid login')
           ? 'Wrong email or password.'
-          : msg.includes('already registered')
+          : normalizedMessage.includes('already registered')
           ? 'That email is already registered. Try logging in.'
           : msg,
       );
