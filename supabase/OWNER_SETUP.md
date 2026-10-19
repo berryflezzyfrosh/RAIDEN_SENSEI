@@ -27,3 +27,12 @@ supabase functions deploy receipt-review
 ```
 
 The function checks extracted text for the entered amount, transaction reference, and configured account number. It stores OCR text, provider confidence, a heuristic risk score, and mismatch flags for admin review. PDFs, unreadable images, and provider failures stay in manual review. These checks do not establish that money was actually received and do not reliably detect AI-generated or edited images. Admin verification must be based on independent payment confirmation; never treat a clean OCR result as proof of payment.
+
+## GitHub Pages frontend configuration
+
+The repository includes a GitHub Actions workflow for Pages. In the GitHub repository, open **Settings → Secrets and variables → Actions → New repository secret** and add:
+
+- `VITE_SUPABASE_URL`: the Supabase project URL, such as `https://your-project.supabase.co`.
+- `VITE_SUPABASE_ANON_KEY`: the Supabase publishable/anon key (never use the service-role key here).
+
+Then open **Settings → Pages** and set the build/deployment source to **GitHub Actions**. Push to `main` or run the workflow manually. The workflow fails before deployment if either value is missing, instead of publishing a site that cannot connect to Supabase. Frontend environment values are compiled into the public site; the anon key is designed for public clients and must be protected by RLS, while service-role keys must only be stored as backend secrets.
