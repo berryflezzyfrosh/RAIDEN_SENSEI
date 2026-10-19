@@ -10,7 +10,7 @@ interface AuthContextValue {
   loading: boolean;
   isPremium: boolean;
   isAdmin: boolean;
-  refreshProfile: () => Promise<void>;
+  refreshProfile: (userId?: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -31,9 +31,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .maybeSingle();
     if (error) {
       console.warn('profile load error', error.message);
+      setProfile(null);
+      setPremiumActive(false);
       return;
     }
     setProfile(data as UserProfile | null);
+    if (!data) {
+      setPremiumActive(false);
+      return;
+    }
     // Authoritative premium check via server RPC
     const { data: prem } = await supabase.rpc('get_my_premium_status').maybeSingle();
     setPremiumActive(Boolean((prem as { is_active?: boolean })?.is_active));
@@ -60,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await loadProfile(sess.user.id);
         } else {
           setProfile(null);
+          setPremiumActive(false);
         }
         setLoading(false);
       })();
@@ -79,8 +86,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       isPremium: premiumActive,
       isAdmin: profile?.is_admin ?? false,
-      refreshProfile: async () => {
-        if (session?.user?.id) await loadProfile(session.user.id);
+      refreshProfile: async (userId) => {
+        const uid = userId ?? session?.user?.id;
+        if (uid) await loadProfile(uid);
       },
       signOut: async () => {
         await supabase.auth.signOut();

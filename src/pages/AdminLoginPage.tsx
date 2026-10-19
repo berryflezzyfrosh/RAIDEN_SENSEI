@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Shield, Mail, Lock, Key, AlertCircle, CheckCircle2, Crown } from 'lucide-react';
 import { Card, Button } from '@/components/ui';
 import { Logo } from '@/components/Logo';
-import { supabase, SUPABASE_URL } from '@/lib/supabase';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase';
 import { navigate } from '@/hooks/useRouter';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -13,6 +13,7 @@ export function AdminLoginPage() {
   const [password, setPassword] = useState('');
   const [secret, setSecret] = useState('');
   const [newSecret, setNewSecret] = useState('');
+  const [bootstrapToken, setBootstrapToken] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -28,12 +29,19 @@ export function AdminLoginPage() {
       if (mode === 'bootstrap') {
         const res = await fetch(fnUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: 'bootstrap_set_secret', newSecret }),
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({ mode: 'bootstrap_set_secret', newSecret, bootstrapToken }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Bootstrap failed');
         setInfo('Owner secret set. You can now create your admin account.');
+        setSecret(newSecret);
+        setNewSecret('');
+        setBootstrapToken('');
         setMode('login');
         setLoading(false);
         return;
@@ -41,7 +49,11 @@ export function AdminLoginPage() {
 
       const res = await fetch(fnUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          },
         body: JSON.stringify({
           mode: 'signup',
           email,
@@ -60,13 +72,20 @@ export function AdminLoginPage() {
           refresh_token: data.session.refresh_token,
         });
         if (setErr) throw setErr;
-        await refreshProfile();
+        await refreshProfile(data.user?.id);
         navigate('admin');
       } else {
         throw new Error('No session returned.');
       }
     } catch (err) {
-      setError((err as Error).message);
+      const message = (err as Error).message;
+      if (message.includes('Owner secret not initialized')) {
+        setMode('bootstrap');
+        setError('');
+        setInfo('First-run setup: choose an owner secret, then create your admin account.');
+      } else {
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -80,7 +99,11 @@ export function AdminLoginPage() {
       const fnUrl = `${SUPABASE_URL}/functions/v1/owner-auth`;
       const res = await fetch(fnUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          },
         body: JSON.stringify({ mode: 'login', email, password, ownerSecret: secret }),
       });
       const data = await res.json();
@@ -91,11 +114,18 @@ export function AdminLoginPage() {
           refresh_token: data.session.refresh_token,
         });
         if (setErr) throw setErr;
-        await refreshProfile();
+        await refreshProfile(data.user?.id);
         navigate('admin');
       }
     } catch (err) {
-      setError((err as Error).message);
+      const message = (err as Error).message;
+      if (message.includes('Owner secret not initialized')) {
+        setMode('bootstrap');
+        setError('');
+        setInfo('First-run setup: choose an owner secret, then create your admin account.');
+      } else {
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -119,14 +149,38 @@ export function AdminLoginPage() {
           </div>
 
           <form onSubmit={submit} className="mt-6 space-y-4">
+            {error && (
+              <div className="flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
+                <AlertCircle size={16} className="mt-0.5 flex-shrink-0" /> {error}
+              </div>
+            )}
+            {info && (
+              <div className="flex items-start gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0" /> {info}
+              </div>
+            )}
             {mode === 'bootstrap' ? (
               <>
-                <Field icon={<Key size={16} />} label="Choose an owner secret (min 8 chars)">
+                <Field icon={<Key size={16} />} label="Server bootstrap token">
+                  <input
+                    type="password"
+                    required
+                    value={bootstrapToken}
+                    onChange={(e) => setBootstrapToken(e.target.value)}
+                    placeholder="OWNER_BOOTSTRAP_SECRET"
+                    autoComplete="off"
+                    className="w-full rounded-xl border border-neutral-300 bg-white pl-10 pr-4 py-2.5 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 focus:outline-none"
+                  />
+                </Field>
+                <Field icon={<Key size={16} />} label="Choose an owner secret (min 20 chars)">
                   <input
                     type="password"
                     value={newSecret}
                     onChange={(e) => setNewSecret(e.target.value)}
-                    placeholder="Long random secret"
+                    minLength={20}
+                    required
+                    autoComplete="new-password"
+                    placeholder="At least 20 characters"
                     className="w-full rounded-xl border border-neutral-300 bg-white pl-10 pr-4 py-2.5 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 focus:outline-none"
                   />
                 </Field>
@@ -176,17 +230,6 @@ export function AdminLoginPage() {
                     className="w-full rounded-xl border border-neutral-300 bg-white pl-10 pr-4 py-2.5 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 focus:outline-none"
                   />
                 </Field>
-
-                {error && (
-                  <div className="flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
-                    <AlertCircle size={16} className="mt-0.5 flex-shrink-0" /> {error}
-                  </div>
-                )}
-                {info && (
-                  <div className="flex items-start gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-                    <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0" /> {info}
-                  </div>
-                )}
 
                 <Button type="submit" full size="lg" loading={loading}>
                   <Crown size={16} /> Create admin account

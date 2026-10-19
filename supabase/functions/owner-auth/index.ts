@@ -1,7 +1,7 @@
 // Owner/Admin authentication edge function.
 //
 // Verifies an owner secret against a server-stored hash in app_config (key:
-// 'admin_owner_secret_hash'). The hash is written once by the first bootstrap call and
+// 'admin_owner_secret_hash'). First-run bootstrap also requires a server-provisioned token.
 // can be rotated from the admin dashboard via admin_update_app_config. The raw secret
 // is NEVER stored, NEVER shipped to the client, and NEVER checked in the frontend.
 //
@@ -37,6 +37,15 @@ async function sha256(s: string): Promise<string> {
     .join("");
 }
 
+function constantTimeEqual(left: string, right: string): boolean {
+  let difference = left.length ^ right.length;
+  const length = Math.max(left.length, right.length);
+  for (let index = 0; index < length; index++) {
+    difference |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
+  }
+  return difference === 0;
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -48,6 +57,9 @@ Deno.serve(async (request: Request) => {
     const mode = String(body.mode ?? "");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
     const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
+      return json({ error: "Owner authentication is not configured on the server." }, 500);
+    }
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
@@ -55,31 +67,45 @@ Deno.serve(async (request: Request) => {
     // ---- Bootstrap: set the owner secret (first-run only) ----
     if (mode === "bootstrap_set_secret") {
       const newSecret = String(body.newSecret ?? "");
-      if (newSecret.length < 8) {
-        return json({ error: "Secret must be at least 8 characters." }, 400);
+      const bootstrapToken = String(body.bootstrapToken ?? "");
+      const configuredBootstrapToken = Deno.env.get("OWNER_BOOTSTRAP_SECRET") ?? "";
+      if (configuredBootstrapToken.length < 32) {
+        return json({ error: "Bootstrap is disabled. Configure OWNER_BOOTSTRAP_SECRET on the server first." }, 503);
       }
-      const { data: existingAdmins } = await admin
+      if (!constantTimeEqual(bootstrapToken, configuredBootstrapToken)) {
+        return json({ error: "Invalid bootstrap authorization." }, 401);
+      }
+      if (newSecret.length < 20) return json({ error: "Owner secret must be at least 20 characters." }, 400);
+      const { data: existingAdmins, error: adminsError } = await admin
         .from("user_profiles")
         .select("id")
         .eq("is_admin", true)
         .limit(1);
+      if (adminsError) return json({ error: adminsError.message }, 500);
       if (existingAdmins && existingAdmins.length > 0) {
         return json({ error: "Admin already exists. Bootstrap closed." }, 403);
       }
-      const { data: existing } = await admin
+      const { data: existing, error: configError } = await admin
         .from("app_config")
         .select("key")
         .eq("key", "admin_owner_secret_hash")
         .maybeSingle();
+      if (configError) return json({ error: configError.message }, 500);
       if (existing) {
         return json({ error: "Owner secret already set. Bootstrap closed." }, 403);
       }
       const hash = await sha256(newSecret);
-      await admin.from("app_config").insert({
+      const { error: insertError } = await admin.from("app_config").insert({
         key: "admin_owner_secret_hash",
         value: hash,
         updated_at: new Date().toISOString(),
       });
+      if (insertError) {
+        if (insertError.code === "23505") {
+          return json({ error: "Owner secret was initialized by another request. Log in with it." }, 409);
+        }
+        return json({ error: `Could not initialize owner secret: ${insertError.message}` }, 500);
+      }
       return json({ ok: true }, 200);
     }
 
@@ -93,11 +119,12 @@ Deno.serve(async (request: Request) => {
       return json({ error: "Email, password, and owner secret are required." }, 400);
     }
 
-    const { data: cfg } = await admin
+    const { data: cfg, error: configReadError } = await admin
       .from("app_config")
       .select("value")
       .eq("key", "admin_owner_secret_hash")
       .maybeSingle();
+    if (configReadError) return json({ error: configReadError.message }, 500);
     if (!cfg?.value) {
       return json(
         { error: "Owner secret not initialized. Bootstrap first." },
@@ -105,16 +132,17 @@ Deno.serve(async (request: Request) => {
       );
     }
     const candidateHash = await sha256(ownerSecret);
-    if (candidateHash.length !== cfg.value.length || candidateHash !== cfg.value) {
+    if (!constantTimeEqual(candidateHash, cfg.value)) {
       return json({ error: "Invalid owner secret." }, 401);
     }
 
     if (mode === "signup") {
-      const { data: existingAdmins } = await admin
+      const { data: existingAdmins, error: adminLookupError } = await admin
         .from("user_profiles")
         .select("id")
         .eq("is_admin", true)
         .limit(1);
+      if (adminLookupError) return json({ error: adminLookupError.message }, 500);
       if (existingAdmins && existingAdmins.length > 0) {
         return json(
           { error: "An admin account already exists. Use login mode instead." },
@@ -145,11 +173,12 @@ Deno.serve(async (request: Request) => {
       if (!u.app_metadata?.is_admin) {
         return json({ error: "This account is not an admin." }, 403);
       }
-      const { data: profile } = await admin
+      const { data: profile, error: profileError } = await admin
         .from("user_profiles")
         .select("account_status")
         .eq("id", u.id)
         .maybeSingle();
+      if (profileError) return json({ error: profileError.message }, 500);
       if (profile?.account_status === "suspended" || profile?.account_status === "banned") {
         return json({ error: "Account suspended." }, 403);
       }

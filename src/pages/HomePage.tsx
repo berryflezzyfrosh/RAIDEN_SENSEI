@@ -17,10 +17,10 @@ export function HomePage() {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="animate-fade-up">
               <span className="inline-flex items-center gap-2 rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700 ring-1 ring-orange-200">
-                <Zap size={12} /> AI-Powered Sensitivity Engine
+                <Zap size={12} /> Device-Aware Sensitivity Engine
               </span>
               <h1 className="mt-5 font-display text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-neutral-900 leading-[1.05]">
-                AI Free Fire<br />
+                Free Fire<br />
                 <span className="text-gradient-orange">Sensitivity Generator</span>
               </h1>
               <p className="mt-5 text-lg sm:text-xl text-neutral-600 font-medium">
@@ -77,13 +77,13 @@ export function HomePage() {
           <FeatureCard
             icon={<Cpu />}
             title="Device Analysis"
-            desc="Real browser-accessible device fingerprinting — screen, OS, touch, CPU, memory."
+            desc="Review device details available in your browser, including screen, OS, touch, CPU, and memory."
             onClick={() => navigate('device')}
           />
           <FeatureCard
             icon={<Activity />}
-            title="Face & Camera Analysis"
-            desc="Camera-based face alignment and framing checks with privacy-first processing."
+            title="Camera Framing Estimate"
+            desc="On-device color-region and lighting estimates for rough framing guidance."
             onClick={() => navigate('face')}
           />
           <FeatureCard
@@ -96,7 +96,7 @@ export function HomePage() {
           <FeatureCard
             icon={<Shield />}
             title="Secure & Verified"
-            desc="Premium access is server-verified. No frontend tricks. Receipt review by admin."
+            desc="Payment records and premium saves are checked against server-side account status. Receipts are reviewed by an admin."
             onClick={() => navigate('premium')}
           />
           <FeatureCard
@@ -174,7 +174,7 @@ function HeroVisual() {
       <div className="absolute inset-0 -m-6 rounded-3xl bg-gradient-to-br from-red-500/30 to-orange-200/20 blur-2xl" />
       <div className="relative overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-2xl shadow-red-900/20 animate-float">
         <img
-          src="/images/102bfd31ff9706eb9b66b53cfe0b5413~tplv-tiktokx-cropcenter_1080_1080.jpeg"
+          src={`${import.meta.env.BASE_URL}images/102bfd31ff9706eb9b66b53cfe0b5413~tplv-tiktokx-cropcenter_1080_1080.jpeg`}
           alt="RΛIDΞN 亗 esports artwork"
           className="h-64 w-full object-cover object-center"
         />

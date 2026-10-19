@@ -23,26 +23,31 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
       setError('Password must be at least 6 characters.');
       return;
     }
+    if (mode === 'signup' && !displayName.trim()) {
+      setError('Enter a display name.');
+      return;
+    }
     setLoading(true);
     try {
       if (mode === 'signup') {
         const { data, error } = await supabase.auth.signUp({
-          email,
+          email: email.trim(),
           password,
-          options: { data: { display_name: displayName } },
+          options: { data: { display_name: displayName.trim() } },
         });
         if (error) throw error;
         if (data.user && !data.session) {
-          setSuccess('Account created. Please log in.');
-          setTimeout(() => navigate('login'), 800);
+          setSuccess(data.user.identities?.length === 0
+            ? 'An account with this email may already exist. Try logging in.'
+            : 'Account created. Check your email to confirm your account, then log in.');
         } else if (data.session) {
-          await refreshProfile();
+          await refreshProfile(data.user?.id);
           navigate('dashboard');
         }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
         if (error) throw error;
-        await refreshProfile();
+        await refreshProfile(data.user.id);
         navigate('dashboard');
       }
     } catch (err) {
@@ -83,9 +88,11 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
                   <UserIcon size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
                   <input
                     type="text"
+                    required
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value.slice(0, 40))}
                     placeholder="Player tag"
+                    autoComplete="nickname"
                     className="w-full rounded-xl border border-neutral-300 bg-white pl-10 pr-4 py-2.5 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 focus:outline-none"
                   />
                 </div>

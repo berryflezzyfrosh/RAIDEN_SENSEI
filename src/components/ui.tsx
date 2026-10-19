@@ -110,6 +110,7 @@ export function Input({
   placeholder,
   required,
   autoComplete,
+  disabled = false,
   className = '',
 }: {
   label?: string;
@@ -119,6 +120,7 @@ export function Input({
   placeholder?: string;
   required?: boolean;
   autoComplete?: string;
+  disabled?: boolean;
   className?: string;
 }) {
   return (
@@ -130,10 +132,11 @@ export function Input({
         type={type}
         value={value}
         required={required}
+        disabled={disabled}
         autoComplete={autoComplete}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 focus:outline-none transition"
+        className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 focus:outline-none transition disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-500"
       />
     </label>
   );

@@ -1,11 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Camera, CameraOff, RefreshCw, CheckCircle2, AlertCircle, Scan, Lightbulb, Focus } from 'lucide-react';
 import { Card, Button, Badge } from '@/components/ui';
-import { PremiumLock } from '@/components/PremiumLock';
-import { useAuth } from '@/hooks/useAuth';
 
 export function FacePage() {
-  const { isPremium } = useAuth();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -65,10 +62,9 @@ export function FacePage() {
     const ctx = canvas.getContext('2d')!;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Basic face detection via brightness center + skin-tone heuristic (no external deps).
-    // This is intentionally lightweight — we don't claim medical/biometric analysis.
+    // Estimate a skin-tone-colored region for rough framing guidance; this is not face detection.
     const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const result = lightweightFaceDetect(data);
+    const result = estimateSkinToneRegion(data);
     setAnalysis(result);
     setAnalyzing(false);
   };
@@ -81,7 +77,7 @@ export function FacePage() {
           Camera <span className="text-gradient-orange">framing check</span>
         </h1>
         <p className="mt-2 text-neutral-500 max-w-xl mx-auto text-sm">
-          Basic on-device analysis of face presence, position, and framing. No image leaves your device.
+          A rough on-device skin-tone region and lighting estimate for framing guidance. This is not face detection, and no image leaves your device.
         </p>
       </header>
 
@@ -140,13 +136,13 @@ export function FacePage() {
           <Card className="p-5">
             <h2 className="font-display font-bold text-neutral-900 mb-3">What we analyze</h2>
             <ul className="space-y-2.5 text-sm text-neutral-700">
-              <Item icon={<Scan size={16} />} text="Whether a face is present in the frame" />
-              <Item icon={<CheckCircle2 size={16} />} text="Approximate face position and bounding box" />
-              <Item icon={<Focus size={16} />} text="Basic framing and centering" />
+              <Item icon={<Scan size={16} />} text="Estimate skin-tone-colored regions in the frame" />
+              <Item icon={<CheckCircle2 size={16} />} text="Approximate region position and bounding box" />
+              <Item icon={<Focus size={16} />} text="Rough framing and centering estimate" />
               <Item icon={<Lightbulb size={16} />} text="Overall lighting brightness" />
             </ul>
             <div className="mt-4 rounded-lg bg-amber-50 border border-amber-100 p-3 text-xs text-amber-800">
-              We do <strong>not</strong> detect identity, emotion, age, or medical information. This is a basic framing aid.
+              This color-based heuristic can miss faces or identify other colored regions. It does not detect identity, emotion, age, or medical information.
             </div>
           </Card>
 
@@ -154,22 +150,15 @@ export function FacePage() {
             <Card className="p-5 animate-scale-in">
               <h3 className="font-display font-bold text-neutral-900 mb-3">Results</h3>
               <div className="space-y-2.5 text-sm">
-                <ResultRow label="Face detected" value={analysis.facePresent ? 'Yes' : 'No'} ok={analysis.facePresent} />
-                <ResultRow label="Position" value={analysis.facePresent ? `${analysis.position}` : '—'} />
-                <ResultRow label="Centering" value={analysis.centering} ok={analysis.centering === 'Good'} />
+                <ResultRow label="Skin-tone region estimate" value={analysis.regionFound ? 'Found' : 'Not found'} ok={analysis.regionFound} />
+                <ResultRow label="Region position" value={analysis.regionFound ? `${analysis.position}` : '—'} />
+                <ResultRow label="Region centering" value={analysis.centering} ok={analysis.centering === 'Good'} />
                 <ResultRow label="Brightness" value={analysis.brightness} ok={analysis.brightness === 'Good'} />
-                <ResultRow label="Confidence" value={`${analysis.confidence}%`} />
+                <ResultRow label="Heuristic score" value={`${analysis.score}%`} />
               </div>
             </Card>
           )}
 
-          {!isPremium && (
-            <PremiumLock
-              title="Advanced face & camera analysis"
-              description="Premium adds facial landmark estimation, head orientation, eye-position checks, and image sharpness scoring."
-              features={['Facial landmark estimation', 'Head orientation (pitch/yaw/roll)', 'Eye-position check', 'Image sharpness scoring']}
-            />
-          )}
         </div>
       </div>
     </div>
@@ -177,15 +166,15 @@ export function FacePage() {
 }
 
 interface FaceAnalysis {
-  facePresent: boolean;
+  regionFound: boolean;
   position: string;
   centering: 'Good' | 'Off-center' | '—';
   brightness: 'Good' | 'Low' | 'High';
-  confidence: number;
+  score: number;
   bbox: { x: number; y: number; w: number; h: number } | null;
 }
 
-function lightweightFaceDetect(img: ImageData): FaceAnalysis {
+function estimateSkinToneRegion(img: ImageData): FaceAnalysis {
   const { data, width, height } = img;
   // Compute average brightness and detect a skin-tone blob center
   let sumBright = 0;
@@ -216,13 +205,13 @@ function lightweightFaceDetect(img: ImageData): FaceAnalysis {
   }
   const sampled = Math.ceil(width / 4) * Math.ceil(height / 4);
   const avgBright = sumBright / sampled;
-  const facePresent = skinPixels > sampled * 0.01;
-  const cx = facePresent ? sumX / skinPixels : width / 2;
-  const cy = facePresent ? sumY / skinPixels : height / 2;
+  const regionFound = skinPixels > sampled * 0.01;
+  const cx = regionFound ? sumX / skinPixels : width / 2;
+  const cy = regionFound ? sumY / skinPixels : height / 2;
 
   const offsetX = Math.abs(cx - width / 2) / (width / 2);
   const offsetY = Math.abs(cy - height / 2) / (height / 2);
-  const centering: FaceAnalysis['centering'] = facePresent
+  const centering: FaceAnalysis['centering'] = regionFound
     ? offsetX < 0.15 && offsetY < 0.15 ? 'Good' : 'Off-center'
     : '—';
 
@@ -230,17 +219,17 @@ function lightweightFaceDetect(img: ImageData): FaceAnalysis {
   if (avgBright < 70) brightness = 'Low';
   else if (avgBright > 210) brightness = 'High';
 
-  const confidence = facePresent
+  const score = regionFound
     ? Math.min(95, 50 + Math.round((skinPixels / sampled) * 200))
     : 20;
 
   return {
-    facePresent,
-    position: facePresent ? `x:${Math.round(cx)}, y:${Math.round(cy)}` : '—',
+    regionFound,
+    position: regionFound ? `x:${Math.round(cx)}, y:${Math.round(cy)}` : '—',
     centering,
     brightness,
-    confidence,
-    bbox: facePresent ? { x: minX, y: minY, w: maxX - minX, h: maxY - minY } : null,
+    score,
+    bbox: regionFound ? { x: minX, y: minY, w: maxX - minX, h: maxY - minY } : null,
   };
 }
 
@@ -261,7 +250,7 @@ function FaceOverlay({ analysis, canvasWidth, canvasHeight }: { analysis: FaceAn
         }}
       />
       <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
-        {analysis.facePresent ? 'Face detected' : 'No face'}
+        Skin-tone region
       </div>
     </div>
   );

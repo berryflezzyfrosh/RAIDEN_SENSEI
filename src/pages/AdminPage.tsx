@@ -79,13 +79,15 @@ function useAdminCall<T>(rpc: string, args?: Record<string, unknown>) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const serializedArgs = JSON.stringify(args ?? {});
   const reload = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.rpc(rpc, args);
+    const { data, error } = await supabase.rpc(rpc, JSON.parse(serializedArgs));
     if (error) setError(error.message);
+    else setError('');
     setData((data as T) ?? null);
     setLoading(false);
-  }, [rpc, args]);
+  }, [rpc, serializedArgs]);
 
   useEffect(() => { reload(); }, [reload]);
   return { data, loading, error, reload };
@@ -148,8 +150,8 @@ function UsersTab() {
   const act = async (action: 'suspend' | 'restore' | 'revoke', userId: string) => {
     setActing(userId);
     const rpc = action === 'suspend' ? 'admin_suspend_user' : action === 'restore' ? 'admin_restore_user' : 'admin_revoke_premium';
-    const { error } = await supabase.rpc(rpc, { p_user_id: userId });
-    if (error) alert(error.message);
+    const { data, error } = await supabase.rpc(rpc, { p_user_id: userId });
+    if (error || data !== true) alert(error?.message ?? 'The requested user action was not completed.');
     await reload();
     setActing(null);
   };
@@ -234,8 +236,8 @@ function PaymentsTab() {
   const act = async (action: 'verify' | 'reject', payId: string) => {
     setActing(payId);
     const rpc = action === 'verify' ? 'admin_verify_payment' : 'admin_reject_payment';
-    const { error } = await supabase.rpc(rpc, { p_payment_id: payId, p_note: '' });
-    if (error) alert(error.message);
+    const { data, error } = await supabase.rpc(rpc, { p_payment_id: payId, p_note: '' });
+    if (error || data !== true) alert(error?.message ?? 'Payment review was not completed. Confirm the payment is still pending and has a receipt.');
     await reload();
     setActing(null);
   };
@@ -290,7 +292,7 @@ function PaymentsTab() {
                   )}
                   {(p.status === 'pending' || p.status === 'under_review') && (
                     <>
-                      <Button size="sm" onClick={() => act('verify', p.id)} loading={acting === p.id}>Verify</Button>
+                      <Button size="sm" onClick={() => act('verify', p.id)} loading={acting === p.id} disabled={!p.storage_path}>Verify</Button>
                       <Button size="sm" variant="danger" onClick={() => act('reject', p.id)} loading={acting === p.id}>Reject</Button>
                     </>
                   )}
@@ -386,6 +388,7 @@ function SettingsTab() {
   const [accNum, setAccNum] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -400,7 +403,13 @@ function SettingsTab() {
   }, []);
 
   const save = async () => {
+    const parsedPrice = Number(price);
+    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+      setError('Enter a valid premium price greater than zero.');
+      return;
+    }
     setSaving(true);
+    setError('');
     const upserts = [
       ['premium_price', price],
       ['opay_bank', bank],
@@ -408,7 +417,12 @@ function SettingsTab() {
       ['opay_account_number', accNum],
     ] as const;
     for (const [k, v] of upserts) {
-      await supabase.rpc('admin_update_app_config', { p_key: k, p_value: v });
+      const { data, error: saveError } = await supabase.rpc('admin_update_app_config', { p_key: k, p_value: v });
+      if (saveError || data !== true) {
+        setError(saveError?.message ?? `Could not save ${k}.`);
+        setSaving(false);
+        return;
+      }
     }
     setSaved(true);
     setSaving(false);
@@ -423,6 +437,7 @@ function SettingsTab() {
         <Input label="Bank" value={bank} onChange={setBank} />
         <Input label="Account name" value={accName} onChange={setAccName} />
         <Input label="Account number" value={accNum} onChange={setAccNum} />
+        {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">{error}</div>}
         <Button onClick={save} loading={saving}>
           {saved ? <><CheckCircle2 size={16} /> Saved</> : 'Save settings'}
         </Button>

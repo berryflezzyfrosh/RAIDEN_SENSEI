@@ -3,10 +3,10 @@ import type { DeviceInfo } from '@/types';
 function parseBrowser(ua: string): string {
   if (/Edg\//.test(ua)) return 'Microsoft Edge';
   if (/OPR\//.test(ua) || /Opera/.test(ua)) return 'Opera';
+  if (/SamsungBrowser/.test(ua)) return 'Samsung Internet';
   if (/Chrome\//.test(ua) && !/Chromium/.test(ua)) return 'Google Chrome';
   if (/Firefox\//.test(ua)) return 'Mozilla Firefox';
   if (/Safari\//.test(ua) && !/Chrome/.test(ua)) return 'Safari';
-  if (/SamsungBrowser/.test(ua)) return 'Samsung Internet';
   return 'Unknown Browser';
 }
 

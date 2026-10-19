@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+export const SUPABASE_ANON_KEY = anonKey ?? '';
 
 if (!url || !anonKey) {
   // In dev, surface a helpful error. The values are pre-populated in hosted env.

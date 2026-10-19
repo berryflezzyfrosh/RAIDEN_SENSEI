@@ -18,17 +18,34 @@ export function PremiumPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [, setLoadingPay] = useState(true);
   const [showPayForm, setShowPayForm] = useState(false);
+  const [resumePayment, setResumePayment] = useState<Payment | null>(null);
 
   const price = Number(config.premium_price || '2500');
 
   const loadPayments = useCallback(async () => {
     if (!user) { setLoadingPay(false); return; }
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('payments')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
-    setPayments((data as Payment[]) ?? []);
+    const loadedPayments = (data as Payment[]) ?? [];
+    setPayments(loadedPayments);
+    if (error) {
+      setResumePayment(null);
+    } else {
+      const pendingIds = loadedPayments.filter((payment) => payment.status === 'pending').map((payment) => payment.id);
+      if (pendingIds.length) {
+        const { data: receipts } = await supabase
+          .from('payment_receipts')
+          .select('payment_id')
+          .in('payment_id', pendingIds);
+        const receiptIds = new Set((receipts ?? []).map((receipt) => receipt.payment_id));
+        setResumePayment(loadedPayments.find((payment) => payment.status === 'pending' && !receiptIds.has(payment.id)) ?? null);
+      } else {
+        setResumePayment(null);
+      }
+    }
     setLoadingPay(false);
   }, [user]);
 
@@ -76,7 +93,8 @@ export function PremiumPage() {
     );
   }
 
-  const pendingPayment = payments.find((p) => p.status === 'pending' || p.status === 'under_review');
+  const pendingPayment = payments.find((payment) => payment.status === 'under_review')
+    ?? payments.find((payment) => payment.status === 'pending' && payment.id !== resumePayment?.id);
 
   return (
     <div className="mx-auto max-w-4xl px-4 sm:px-6 py-10">
@@ -100,7 +118,6 @@ export function PremiumPage() {
             'High-quality PNG sensitivity poster',
             'Advanced confidence scoring',
             'Unlimited saved sensitivity profiles',
-            'Advanced face & camera analysis',
             'Priority receipt verification',
           ].map((f) => (
             <div key={f} className="flex items-start gap-2.5 text-sm text-neutral-700">
@@ -125,7 +142,23 @@ export function PremiumPage() {
         </Card>
       )}
 
-      {pendingPayment ? (
+      {resumePayment ? (
+        <Card className="p-6 animate-fade-up border-amber-200">
+          <h2 className="font-display font-bold text-neutral-900">Finish your receipt submission</h2>
+          <p className="mt-1 text-sm text-neutral-500">Your payment record was saved, but the receipt upload did not finish.</p>
+          <PaymentForm
+            key={resumePayment.id}
+            price={price}
+            config={config}
+            copied={copied}
+            onCopy={copyAccount}
+            paymentId={resumePayment.id}
+            initialReference={resumePayment.transaction_reference}
+            onSubmitted={() => { setShowPayForm(false); loadPayments(); refreshProfile(); }}
+            onCancel={() => setResumePayment(null)}
+          />
+        </Card>
+      ) : pendingPayment ? (
         <Card className="p-6 animate-fade-up border-amber-200">
           <div className="flex items-center gap-3">
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
@@ -169,19 +202,21 @@ export function PremiumPage() {
 }
 
 function PaymentForm({
-  price, config, copied, onCopy, onSubmitted, onCancel,
+  price, config, copied, onCopy, paymentId, initialReference, onSubmitted, onCancel,
 }: {
   price: number;
   config: { opay_bank: string; opay_account_name: string; opay_account_number: string };
   copied: boolean;
   onCopy: () => void;
+  paymentId?: string;
+  initialReference?: string;
   onSubmitted: () => void;
   onCancel: () => void;
 }) {
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2>(paymentId ? 2 : 1);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [ref, setRef] = useState('');
+  const [ref, setRef] = useState(initialReference ?? '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -212,23 +247,28 @@ function PaymentForm({
     if (ref.trim().length < 4) { setError('Enter a valid transaction/reference number.'); return; }
     setSubmitting(true);
     try {
-      const { data: payData, error: payErr } = await supabase
-        .from('payments')
-        .insert({ amount: price, transaction_reference: ref.trim() })
-        .select('id')
-        .single();
-      if (payErr) throw payErr;
-      const paymentId = (payData as { id: string }).id;
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) throw new Error('Please log in again before submitting your receipt.');
+      let targetPaymentId = paymentId;
+      if (!targetPaymentId) {
+        const { data: payData, error: payErr } = await supabase
+          .from('payments')
+          .insert({ amount: price, transaction_reference: ref.trim() })
+          .select('id')
+          .single();
+        if (payErr) throw payErr;
+        targetPaymentId = (payData as { id: string }).id;
+      }
 
       const ext = file.name.split('.').pop();
-      const path = `${(await supabase.auth.getUser()).data.user!.id}/${paymentId}.${ext}`;
+      const path = `${authData.user.id}/${targetPaymentId}-${crypto.randomUUID()}.${ext}`;
       const { error: upErr } = await supabase.storage
         .from('receipts')
         .upload(path, file, { upsert: false });
       if (upErr) throw upErr;
 
       const { error: recErr } = await supabase.from('payment_receipts').insert({
-        payment_id: paymentId,
+        payment_id: targetPaymentId,
         storage_path: path,
         file_name: file.name,
         file_size: file.size,
@@ -292,7 +332,7 @@ function PaymentForm({
         <div>
           <label className="block">
             <span className="block text-sm font-medium text-neutral-700 mb-1.5">Transaction / reference number</span>
-            <Input value={ref} onChange={setRef} placeholder="e.g. OPP123456789" />
+            <Input value={ref} onChange={setRef} placeholder="e.g. OPP123456789" disabled={Boolean(paymentId)} />
           </label>
 
           <div className="mt-4">
