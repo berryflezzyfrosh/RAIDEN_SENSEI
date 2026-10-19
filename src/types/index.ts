@@ -140,6 +140,8 @@ export interface AdminPaymentRow {
   mime_type: string | null;
   fraud_risk_score: number;
   fraud_flags: string[];
+  ocr_text: string | null;
+  ocr_confidence: number;
 }
 
 export interface AdminLogRow {

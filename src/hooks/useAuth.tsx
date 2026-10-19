@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: session?.user ?? null,
       profile,
       loading,
-      isPremium: premiumActive,
+      isPremium: Boolean(profile?.is_admin && profile.account_status === 'active') || premiumActive,
       isAdmin: profile?.is_admin ?? false,
       refreshProfile: async (userId) => {
         const uid = userId ?? session?.user?.id;

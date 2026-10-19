@@ -276,9 +276,11 @@ function PaymentForm({
         ocr_text: '',
         ocr_confidence: 0,
         fraud_risk_score: 0,
-        fraud_flags: [],
+        fraud_flags: ['scan_pending'],
       });
       if (recErr) throw recErr;
+
+      await supabase.functions.invoke('receipt-review', { body: { paymentId: targetPaymentId } });
 
       onSubmitted();
     } catch (err) {

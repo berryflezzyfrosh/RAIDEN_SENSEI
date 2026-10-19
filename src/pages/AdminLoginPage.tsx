@@ -6,6 +6,34 @@ import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase';
 import { navigate } from '@/hooks/useRouter';
 import { useAuth } from '@/hooks/useAuth';
 
+interface OwnerAuthResponse {
+  error?: string;
+  session?: { access_token?: string; refresh_token?: string };
+  user?: { id?: string };
+}
+
+async function readFunctionResponse(response: Response): Promise<OwnerAuthResponse> {
+  const body = await response.text();
+  try {
+    return JSON.parse(body) as OwnerAuthResponse;
+  } catch {
+    const contentType = response.headers.get('content-type') ?? 'unknown content type';
+    const preview = body.replace(/\s+/g, ' ').slice(0, 100);
+    throw new Error(
+      `Owner authentication endpoint returned a non-JSON response (HTTP ${response.status}, ${contentType}). ` +
+      `Check that the owner-auth Edge Function is deployed to this Supabase project. Response: ${preview}`,
+    );
+  }
+}
+
+function ownerAuthErrorMessage(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  if (/failed to fetch|networkerror|load failed/i.test(message)) {
+    return 'Could not reach the Supabase owner-auth service. Check your internet connection and VITE_SUPABASE_URL, then confirm the owner-auth Edge Function is available.';
+  }
+  return message;
+}
+
 export function AdminLoginPage() {
   const { refreshProfile } = useAuth();
   const [mode, setMode] = useState<'login' | 'bootstrap'>('login');
@@ -36,7 +64,7 @@ export function AdminLoginPage() {
           },
           body: JSON.stringify({ mode: 'bootstrap_set_secret', newSecret, bootstrapToken }),
         });
-        const data = await res.json();
+        const data = await readFunctionResponse(res);
         if (!res.ok) throw new Error(data.error || 'Bootstrap failed');
         setInfo('Owner secret set. You can now create your admin account.');
         setSecret(newSecret);
@@ -62,11 +90,11 @@ export function AdminLoginPage() {
           displayName,
         }),
       });
-      const data = await res.json();
+      const data = await readFunctionResponse(res);
       if (!res.ok) throw new Error(data.error || 'Auth failed');
 
       // The edge function returns a session; set it in the client.
-      if (data.session?.access_token) {
+      if (data.session?.access_token && data.session.refresh_token) {
         const { error: setErr } = await supabase.auth.setSession({
           access_token: data.session.access_token,
           refresh_token: data.session.refresh_token,
@@ -78,7 +106,7 @@ export function AdminLoginPage() {
         throw new Error('No session returned.');
       }
     } catch (err) {
-      const message = (err as Error).message;
+      const message = ownerAuthErrorMessage(err);
       if (message.includes('Owner secret not initialized')) {
         setMode('bootstrap');
         setError('');
@@ -106,9 +134,9 @@ export function AdminLoginPage() {
           },
         body: JSON.stringify({ mode: 'login', email, password, ownerSecret: secret }),
       });
-      const data = await res.json();
+      const data = await readFunctionResponse(res);
       if (!res.ok) throw new Error(data.error || 'Login failed');
-      if (data.session?.access_token) {
+      if (data.session?.access_token && data.session.refresh_token) {
         const { error: setErr } = await supabase.auth.setSession({
           access_token: data.session.access_token,
           refresh_token: data.session.refresh_token,
@@ -118,7 +146,7 @@ export function AdminLoginPage() {
         navigate('admin');
       }
     } catch (err) {
-      const message = (err as Error).message;
+      const message = ownerAuthErrorMessage(err);
       if (message.includes('Owner secret not initialized')) {
         setMode('bootstrap');
         setError('');

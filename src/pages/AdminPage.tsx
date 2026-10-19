@@ -281,7 +281,9 @@ function PaymentsTab() {
                     {p.review_note && <span className="ml-2">• Note: {p.review_note}</span>}
                   </div>
                   {p.fraud_flags && p.fraud_flags.length > 0 && (
-                    <div className="mt-1 text-xs text-amber-700">Flags: {p.fraud_flags.join(', ')}</div>
+                    <div className="mt-1 text-xs text-amber-700">
+                      Screening risk {p.fraud_risk_score}/100: {p.fraud_flags.join(', ')}
+                    </div>
                   )}
                 </div>
                 <div className="flex gap-1.5">
@@ -340,6 +342,9 @@ function ReceiptModal({ payment, onClose }: { payment: AdminPaymentRow; onClose:
             <div><span className="text-neutral-500">Status:</span> {payment.status}</div>
             <div><span className="text-neutral-500">File:</span> {payment.file_name}</div>
             <div><span className="text-neutral-500">Submitted:</span> {new Date(payment.created_at).toLocaleString()}</div>
+            <div><span className="text-neutral-500">OCR confidence:</span> {Math.round((payment.ocr_confidence ?? 0) * 100)}%</div>
+            <div><span className="text-neutral-500">Screening risk:</span> {payment.fraud_risk_score}/100</div>
+            {payment.ocr_text && <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-neutral-50 p-3 text-xs text-neutral-700">{payment.ocr_text}</pre>}
           </div>
         </div>
       </div>

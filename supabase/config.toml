@@ -1,2 +1,5 @@
 [functions.owner-auth]
 verify_jwt = false
+
+[functions.receipt-review]
+verify_jwt = true
