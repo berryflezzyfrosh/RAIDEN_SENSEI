@@ -35,7 +35,10 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
-          options: { data: { display_name: displayName.trim() } },
+          options: {
+            data: { display_name: displayName.trim() },
+            emailRedirectTo: `${window.location.origin}${import.meta.env.BASE_URL}`,
+          },
         });
         if (error) throw error;
         if (data.user && !data.session) {
