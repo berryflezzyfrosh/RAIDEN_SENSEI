@@ -37,7 +37,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
           password,
           options: {
             data: { display_name: displayName.trim() },
-            emailRedirectTo: `${window.location.origin}${import.meta.env.BASE_URL}`,
+            emailRedirectTo: `${window.location.origin}${import.meta.env.BASE_URL}#/confirm-email`,
           },
         });
         if (error) throw error;

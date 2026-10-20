@@ -3,6 +3,7 @@ import { useRouter, navigate } from '@/hooks/useRouter';
 import { Layout } from '@/layouts/Layout';
 import { HomePage } from '@/pages/HomePage';
 import { AuthPage } from '@/pages/AuthPage';
+import { ConfirmEmailPage } from '@/pages/ConfirmEmailPage';
 import { DevicePage } from '@/pages/DevicePage';
 import { SensitivityPage } from '@/pages/SensitivityPage';
 import { FacePage } from '@/pages/FacePage';
@@ -54,6 +55,7 @@ function Router() {
       case 'profile': return user ? <ProfilePage /> : <AuthPage mode="login" />;
       case 'login': return <AuthPage mode="login" />;
       case 'signup': return <AuthPage mode="signup" />;
+      case 'confirm-email': return <ConfirmEmailPage />;
       case 'admin': return isAdmin ? <AdminPage /> : <AdminLoginPage />;
       default: return <HomePage />;
     }

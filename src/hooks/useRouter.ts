@@ -10,12 +10,13 @@ export type Route =
   | { name: 'profile' }
   | { name: 'login' }
   | { name: 'signup' }
+  | { name: 'confirm-email' }
   | { name: 'admin' }
   | { name: 'admin-login' };
 
 const ROUTE_NAMES = [
   'home', 'sensitivity', 'device', 'face', 'premium',
-  'dashboard', 'profile', 'login', 'signup', 'admin', 'admin-login',
+  'dashboard', 'profile', 'login', 'signup', 'confirm-email', 'admin', 'admin-login',
 ] as const;
 
 function parseHash(): Route {
