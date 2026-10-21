@@ -97,13 +97,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(() => {
+    const adminActive = session?.user.app_metadata?.is_admin === true
+      && profile?.account_status === 'active';
     return {
       session,
       user: session?.user ?? null,
       profile,
       loading,
-      isPremium: Boolean(profile?.is_admin && profile.account_status === 'active') || premiumActive,
-      isAdmin: profile?.is_admin ?? false,
+      isPremium: adminActive || premiumActive,
+      isAdmin: adminActive,
       refreshProfile: async (userId) => {
         const uid = userId ?? session?.user?.id;
         if (uid) await loadProfileRef.current(uid);
