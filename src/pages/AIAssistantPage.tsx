@@ -32,7 +32,7 @@ function formatDate(value: string) {
   return new Date(value).toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
-export function AIAssistantPage() {
+export function AIAssistantPage({ floating = false }: { floating?: boolean }) {
   const { user } = useAuth();
   const [conversations, setConversations] = useState<AIConversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -125,19 +125,19 @@ export function AIAssistantPage() {
 
   const activeConversation = conversations.find((item) => item.id === activeId);
 
-  return <div className="mx-auto max-w-7xl px-4 py-7 sm:px-6">
-    <header className="mb-5 flex flex-wrap items-end justify-between gap-3"><div><Badge color="orange"><Bot size={13} /> AI Assistant</Badge><h1 className="mt-2 font-display text-2xl font-bold text-neutral-900">RAIDEN Assistant</h1><p className="mt-1 text-sm text-neutral-500">Ask about RAIDEN SENSEI, Free Fire practice, tools, and Premium.</p></div><Button onClick={() => { setActiveId(null); setMessages([]); setDraft(''); setError(''); setShowChatOnMobile(true); }}><Plus size={16} />New conversation</Button></header>
+  return <div className={`mx-auto max-w-7xl px-4 py-7 sm:px-6 ${floating ? 'h-full max-w-none overflow-hidden px-3 py-3 sm:px-4 sm:py-3' : ''}`}>
+    <header className={`flex flex-wrap items-end justify-between gap-3 ${floating ? 'mb-3' : 'mb-5'}`}><div><Badge color="orange"><Bot size={13} /> AI Assistant</Badge><h1 className={`mt-2 font-display font-bold text-neutral-900 ${floating ? 'text-lg' : 'text-2xl'}`}>RAIDEN Assistant</h1>{!floating && <p className="mt-1 text-sm text-neutral-500">Ask about RAIDEN SENSEI, Free Fire practice, tools, and Premium.</p>}</div><Button size={floating ? 'sm' : 'md'} onClick={() => { setActiveId(null); setMessages([]); setDraft(''); setError(''); setShowChatOnMobile(true); }}><Plus size={16} />New chat</Button></header>
     {error && <div className="mb-4 flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss error">×</button></div>}
 
-    <div className="grid min-h-[min(72vh,760px)] gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
-      <div className={showChatOnMobile ? 'hidden lg:block' : 'block'}><Card className="flex min-h-[220px] flex-col overflow-hidden">
+    <div className={`grid min-h-[min(72vh,760px)] gap-4 lg:grid-cols-[280px_minmax(0,1fr)] ${floating ? 'h-[calc(100%-4.5rem)] min-h-0 gap-3' : ''}`}>
+      <div className={showChatOnMobile ? 'hidden lg:block' : 'block'}><Card className={`flex flex-col overflow-hidden ${floating ? 'h-full min-h-0' : 'min-h-[220px]'}`}>
         <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3"><h2 className="text-sm font-semibold text-neutral-800">Your conversations</h2><MessageSquarePlus size={16} className="text-neutral-400" /></div>
         <div className="flex-1 overflow-y-auto">
           {loadingList ? <Spinner label="Loading history..." /> : conversations.length === 0 ? <div className="p-5 text-center text-sm text-neutral-500">Your AI chats will appear here.</div> : conversations.map((conversation) => <div key={conversation.id} className={`group flex items-center border-b border-neutral-100 ${activeId === conversation.id ? 'bg-orange-50/70' : 'hover:bg-neutral-50'}`}><button onClick={() => { setActiveId(conversation.id); setShowChatOnMobile(true); }} className="min-w-0 flex-1 px-4 py-3 text-left"><span className="block truncate text-sm font-medium text-neutral-800">{conversation.title}</span><span className="mt-1 block text-[11px] text-neutral-400">{formatDate(conversation.updated_at)}</span></button><button onClick={() => void deleteConversation(conversation.id)} aria-label="Delete conversation" title="Delete conversation" className="mr-2 rounded-md p-2 text-neutral-400 opacity-0 hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 focus:opacity-100"><Trash2 size={14} /></button></div>)}
         </div>
       </Card></div>
 
-      <div className={showChatOnMobile ? 'block' : 'hidden lg:block'}><Card className="flex min-h-[min(72vh,760px)] flex-col overflow-hidden">
+      <div className={showChatOnMobile ? 'block' : 'hidden lg:block'}><Card className={`flex flex-col overflow-hidden ${floating ? 'h-full min-h-0' : 'min-h-[min(72vh,760px)]'}`}>
         <div className="flex items-center gap-3 border-b border-neutral-100 px-4 py-3"><button onClick={() => setShowChatOnMobile(false)} className="rounded-lg p-2 text-neutral-500 hover:bg-neutral-100 lg:hidden" aria-label="Back to AI conversations"><ArrowLeft size={18} /></button><span className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100 text-orange-700"><Bot size={19} /></span><div className="min-w-0"><h2 className="truncate text-sm font-semibold text-neutral-900">{activeConversation?.title ?? 'New conversation'}</h2><p className="text-xs text-neutral-500">RAIDEN SENSEI AI · Separate from private messages</p></div><span className="ml-auto hidden items-center gap-1 text-xs text-neutral-500 sm:inline-flex"><LockKeyhole size={13} />Private</span></div>
 
         <div className="flex-1 overflow-y-auto bg-neutral-50/60 p-4 sm:p-6" aria-live="polite">

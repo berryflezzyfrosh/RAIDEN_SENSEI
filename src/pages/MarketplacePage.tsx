@@ -6,6 +6,7 @@ import {
 import { Badge, Button, Card } from '@/components/ui';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppConfig } from '@/hooks/useAppConfig';
+import { CURRENCY_OPTIONS, useMarketplaceCurrency } from '@/hooks/useMarketplaceCurrency';
 import { supabase } from '@/lib/supabase';
 
 type Section = 'accounts' | 'huds';
@@ -90,6 +91,7 @@ async function requestModeration(listingId: string, listingType: Section) {
 export function MarketplacePage() {
   const { user } = useAuth();
   const { config } = useAppConfig();
+  const { currency, setCurrency, currencyLabel, countryName, ratesReady, formatNaira } = useMarketplaceCurrency();
   const [section, setSection] = useState<Section>('accounts');
   const [accounts, setAccounts] = useState<AccountListing[]>([]);
   const [huds, setHuds] = useState<HudListing[]>([]);
@@ -221,10 +223,12 @@ export function MarketplacePage() {
 
       {section === 'accounts' && <div className="mb-5 flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><AlertTriangle size={18} className="mt-0.5 shrink-0" /><p><strong>Account transfer warning:</strong> Account sales and transfers may violate Garena / Free Fire terms or current regional rules. Review the latest official rules before listing or buying. Transactions are between users; never share passwords or verification codes in a listing.</p></div>}
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+      <div className="mb-2 grid gap-3 sm:grid-cols-[minmax(0,1fr)_190px_190px]">
         <label className="relative block"><Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" /><input className={`${fieldClass} pl-9`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={section === 'accounts' ? 'Search titles, items, characters, regions...' : 'Search HUDs, devices, layouts...'} /></label>
         <label className="relative block"><Filter size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" /><select className={`${fieldClass} appearance-none pl-9 pr-9 capitalize`} value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">All categories</option>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select><ChevronDown size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" /></label>
+        <label className="block text-xs font-medium text-neutral-500">Display currency<select className={`${fieldClass} mt-1`} value={currency} onChange={(event) => setCurrency(event.target.value)}>{CURRENCY_OPTIONS.map(([code, label]) => <option key={code} value={code}>{code} · {label}</option>)}{!CURRENCY_OPTIONS.some(([code]) => code === currency) && <option value={currency}>{currency} · detected</option>}</select></label>
       </div>
+      <p className="mb-5 text-[11px] text-neutral-500">Estimated location: {countryName} · {ratesReady || currency === 'NGN' ? `Converted approximately from NGN to ${currencyLabel}.` : 'Exchange rates unavailable; showing NGN.'}</p>
 
       {formOpen && user && (
         <div className="mb-6">
@@ -237,11 +241,11 @@ export function MarketplacePage() {
         <Card className="p-10 text-center"><Store size={30} className="mx-auto text-neutral-300" /><h2 className="mt-3 font-display font-bold text-neutral-800">No listings found</h2><p className="mt-1 text-sm text-neutral-500">Try another search or create the first listing in this category.</p></Card>
       ) : section === 'accounts' ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {filteredAccounts.map((listing) => <AccountListingCard key={listing.id} listing={listing} isOwner={listing.seller_id === user?.id} onEdit={() => { setEditingAccount(listing); setEditingHud(null); setFormOpen(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDelete={() => deleteListing('accounts', listing.id)} onStatus={(status) => changeStatus('accounts', listing.id, status)} />)}
+          {filteredAccounts.map((listing) => <AccountListingCard key={listing.id} listing={listing} formatNaira={formatNaira} isOwner={listing.seller_id === user?.id} onEdit={() => { setEditingAccount(listing); setEditingHud(null); setFormOpen(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDelete={() => deleteListing('accounts', listing.id)} onStatus={(status) => changeStatus('accounts', listing.id, status)} />)}
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {filteredHuds.map((listing) => <HudListingCard key={listing.id} listing={listing} isOwner={listing.seller_id === user?.id} isPurchased={purchasedHudIds.includes(listing.id)} isPending={pendingHudIds.includes(listing.id)} onBuy={() => setBuyingHud(listing)} onEdit={() => { setEditingHud(listing); setEditingAccount(null); setFormOpen(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDelete={() => deleteListing('huds', listing.id)} onStatus={(status) => changeStatus('huds', listing.id, status)} onDownload={() => downloadHudFile(listing.hud_file_path, setError)} />)}
+          {filteredHuds.map((listing) => <HudListingCard key={listing.id} listing={listing} formatNaira={formatNaira} isOwner={listing.seller_id === user?.id} isPurchased={purchasedHudIds.includes(listing.id)} isPending={pendingHudIds.includes(listing.id)} onBuy={() => setBuyingHud(listing)} onEdit={() => { setEditingHud(listing); setEditingAccount(null); setFormOpen(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDelete={() => deleteListing('huds', listing.id)} onStatus={(status) => changeStatus('huds', listing.id, status)} onDownload={() => downloadHudFile(listing.hud_file_path, setError)} />)}
         </div>
       )}
 
@@ -387,7 +391,7 @@ function HudListingForm({ userId, listing, onSaved, onCancel }: { userId: string
   </form></Card>;
 }
 
-function AccountListingCard({ listing, isOwner, onEdit, onDelete, onStatus }: { listing: AccountListing; isOwner: boolean; onEdit: () => void; onDelete: () => void; onStatus: (status: ListingStatus) => void }) {
+function AccountListingCard({ listing, formatNaira, isOwner, onEdit, onDelete, onStatus }: { listing: AccountListing; formatNaira: (amount: number) => string; isOwner: boolean; onEdit: () => void; onDelete: () => void; onStatus: (status: ListingStatus) => void }) {
   const [imageIndex, setImageIndex] = useState(0);
   const image = listing.image_paths[imageIndex];
   return <Card className="overflow-hidden">
@@ -398,22 +402,22 @@ function AccountListingCard({ listing, isOwner, onEdit, onDelete, onStatus }: { 
       <div className="mt-3 flex flex-wrap gap-1.5">{listing.category && <Badge color="neutral">{listing.category}</Badge>}{listing.available_items && <Badge color="orange">Items listed</Badge>}</div>
       {isOwner && listing.review_status !== 'approved' && <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3"><Badge color={listing.review_status === 'pending' ? 'amber' : 'red'}>{listing.review_status === 'pending' ? 'Awaiting review' : 'Rejected'}</Badge><p className="mt-2 text-xs text-amber-900">{listing.review_reason || 'This listing is hidden until it is approved.'}</p></div>}
       {(listing.available_items || listing.character_info || listing.account_details) && <details className="mt-3 border-t border-neutral-100 pt-3"><summary className="cursor-pointer text-sm font-semibold text-orange-700">Account details</summary><div className="mt-2 space-y-2 text-sm text-neutral-600">{listing.available_items && <p><strong className="text-neutral-800">Items / skins:</strong> {listing.available_items}</p>}{listing.character_info && <p><strong className="text-neutral-800">Characters:</strong> {listing.character_info}</p>}{listing.account_details && <p><strong className="text-neutral-800">Other details:</strong> {listing.account_details}</p>}</div></details>}
-      <div className="mt-4 flex items-center justify-between border-t border-neutral-100 pt-3"><div className="font-display text-xl font-bold text-orange-700">₦{Number(listing.asking_price).toLocaleString()}</div><div className="text-right text-xs text-neutral-500">Seller<br /><span className="font-medium text-neutral-700">{listing.seller_name}</span></div></div>
+      <div className="mt-4 flex items-center justify-between border-t border-neutral-100 pt-3"><div><div className="font-display text-xl font-bold text-orange-700">{formatNaira(Number(listing.asking_price))}</div><div className="text-[10px] text-neutral-400">Listed at ₦{Number(listing.asking_price).toLocaleString()} NGN</div></div><div className="text-right text-xs text-neutral-500">Seller<br /><span className="font-medium text-neutral-700">{listing.seller_name}</span></div></div>
       {listing.seller_contact && <p className="mt-2 break-all text-xs text-neutral-500">Contact: {listing.seller_contact}</p>}
       {isOwner && <OwnerActions status={listing.status} reviewStatus={listing.review_status} onEdit={onEdit} onDelete={onDelete} onStatus={onStatus} />}
     </div>
   </Card>;
 }
 
-function HudListingCard({ listing, isOwner, isPurchased, isPending, onBuy, onEdit, onDelete, onStatus, onDownload }: { listing: HudListing; isOwner: boolean; isPurchased: boolean; isPending: boolean; onBuy: () => void; onEdit: () => void; onDelete: () => void; onStatus: (status: ListingStatus) => void; onDownload: () => void }) {
+function HudListingCard({ listing, formatNaira, isOwner, isPurchased, isPending, onBuy, onEdit, onDelete, onStatus, onDownload }: { listing: HudListing; formatNaira: (amount: number) => string; isOwner: boolean; isPurchased: boolean; isPending: boolean; onBuy: () => void; onEdit: () => void; onDelete: () => void; onStatus: (status: ListingStatus) => void; onDownload: () => void }) {
   return <Card className="overflow-hidden">
     <img src={publicImage(listing.preview_path)} alt={`${listing.title} HUD preview`} className="aspect-[16/10] w-full bg-neutral-100 object-cover" loading="lazy" />
     <div className="p-4">
       <div className="flex items-start justify-between gap-2"><div><h2 className="font-display text-lg font-bold text-neutral-900">{listing.title}</h2><p className="mt-1 text-xs text-neutral-500">{listing.category} · {listing.device_compatibility || 'Device details not provided'}</p></div><Badge color={listing.status === 'active' ? 'green' : 'neutral'}>{listing.status}</Badge></div>
       <p className="mt-3 line-clamp-3 text-sm text-neutral-600">{listing.description}</p>
       {isOwner && listing.review_status !== 'approved' && <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3"><Badge color={listing.review_status === 'pending' ? 'amber' : 'red'}>{listing.review_status === 'pending' ? 'Awaiting review' : 'Rejected'}</Badge><p className="mt-2 text-xs text-amber-900">{listing.review_reason || 'This listing is hidden until it is approved.'}</p></div>}
-      <div className="mt-4 flex items-center justify-between border-t border-neutral-100 pt-3"><div className="font-display text-xl font-bold text-orange-700">{listing.is_free ? 'Free' : `₦${Number(listing.asking_price).toLocaleString()}`}</div><div className="text-right text-xs text-neutral-500">Shared by<br /><span className="font-medium text-neutral-700">{listing.seller_name}</span></div></div>
-      {!isOwner && (listing.status === 'active' || isPurchased) && (listing.is_free || isPurchased ? <Button full className="mt-4" onClick={onDownload}><Download size={16} />Download HUD</Button> : isPending ? <Button full className="mt-4" variant="outline" disabled><ShieldCheck size={16} />Payment under review</Button> : <Button full className="mt-4" onClick={onBuy}><CircleDollarSign size={16} />Purchase HUD</Button>)}
+      <div className="mt-4 flex items-center justify-between border-t border-neutral-100 pt-3"><div><div className="font-display text-xl font-bold text-orange-700">{listing.is_free ? 'Free' : formatNaira(Number(listing.asking_price))}</div>{!listing.is_free && <div className="text-[10px] text-neutral-400">Listed at ₦{Number(listing.asking_price).toLocaleString()} NGN</div>}</div><div className="text-right text-xs text-neutral-500">Shared by<br /><span className="font-medium text-neutral-700">{listing.seller_name}</span></div></div>
+      {!isOwner && (listing.status === 'active' || isPurchased) && (listing.is_free || isPurchased ? <Button full className="mt-4" onClick={onDownload}><Download size={16} />Download HUD</Button> : isPending ? <Button full className="mt-4" variant="outline" disabled><ShieldCheck size={16} />Payment under review</Button> : <Button full className="mt-4" onClick={onBuy}><CircleDollarSign size={16} />Purchase HUD · {formatNaira(Number(listing.asking_price))}</Button>)}
       {isOwner && <OwnerActions status={listing.status} reviewStatus={listing.review_status} onEdit={onEdit} onDelete={onDelete} onStatus={(status) => onStatus(status === 'sold' ? 'hidden' : status)} />}
     </div>
   </Card>;

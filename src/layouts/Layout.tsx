@@ -6,6 +6,7 @@ import { navigate, type Route } from '@/hooks/useRouter';
 import { Button } from '@/components/ui';
 import { PremiumBadge } from '@/components/PremiumLock';
 import { useMessageNotifications } from '@/hooks/useMessageNotifications';
+import { AIAssistantPage } from '@/pages/AIAssistantPage';
 
 const NAV: { label: string; route: Route['name']; }[] = [
   { label: 'Home', route: 'home' },
@@ -15,7 +16,6 @@ const NAV: { label: string; route: Route['name']; }[] = [
   { label: 'Premium', route: 'premium' },
   { label: 'Marketplace', route: 'marketplace' },
   { label: 'Messages', route: 'messages' },
-  { label: 'AI Assistant', route: 'assistant' },
 ];
 
 const MOBILE_BOTTOM: { label: string; route: Route['name']; icon: typeof Home }[] = [
@@ -26,7 +26,6 @@ const MOBILE_BOTTOM: { label: string; route: Route['name']; icon: typeof Home }[
   { label: 'Premium', route: 'premium', icon: Crown },
   { label: 'Market', route: 'marketplace', icon: Store },
   { label: 'Messages', route: 'messages', icon: MessageCircle },
-  { label: 'AI', route: 'assistant', icon: Bot },
 ];
 
 export function Layout({
@@ -39,6 +38,7 @@ export function Layout({
   const { user, profile, isAdmin, isPremium, signOut } = useAuth();
   const { unreadCount, notice, clearNotice } = useMessageNotifications();
   const [open, setOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   const isActive = (r: Route['name']) => current === r;
   const openNotice = () => {
@@ -236,6 +236,17 @@ export function Layout({
       </nav>
 
       {notice && <div className="fixed bottom-20 right-4 z-50 flex max-w-sm items-center gap-3 rounded-lg border border-orange-200 bg-white p-3 shadow-lg md:bottom-5" role="status"><MessageCircle size={18} className="shrink-0 text-orange-600" /><p className="flex-1 text-sm text-neutral-800">New private message received.</p><button onClick={openNotice} className="text-sm font-semibold text-orange-700 hover:text-orange-800">Open</button><button onClick={clearNotice} aria-label="Dismiss notification" className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100"><X size={15} /></button></div>}
+
+      {user && <button onClick={() => setAssistantOpen((value) => !value)} aria-label={assistantOpen ? 'Close AI Assistant' : 'Open AI Assistant'} aria-expanded={assistantOpen} className="fixed bottom-20 right-4 z-[55] inline-flex h-14 w-14 items-center justify-center rounded-full bg-orange-600 text-white shadow-lg shadow-orange-900/20 transition hover:bg-orange-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 md:bottom-6">
+        {assistantOpen ? <X size={22} /> : <Bot size={23} />}
+      </button>}
+
+      {user && assistantOpen && <div className="fixed inset-0 z-[60] bg-black/35 backdrop-blur-[2px] sm:bg-transparent sm:backdrop-blur-none" onClick={() => setAssistantOpen(false)}>
+        <section role="dialog" aria-modal="true" aria-label="RAIDEN SENSEI AI Assistant" className="absolute inset-0 overflow-hidden bg-white pt-11 sm:inset-x-4 sm:bottom-20 sm:top-auto sm:right-4 sm:left-auto sm:h-[min(820px,calc(100vh-7rem))] sm:w-[min(1100px,calc(100vw-2rem))] sm:rounded-xl sm:border sm:border-neutral-200 sm:shadow-2xl" onClick={(event) => event.stopPropagation()}>
+          <button onClick={() => setAssistantOpen(false)} aria-label="Close AI Assistant" className="absolute right-3 top-2 z-10 rounded-lg p-2 text-neutral-500 hover:bg-neutral-100 sm:right-2 sm:top-2"><X size={19} /></button>
+          <AIAssistantPage floating />
+        </section>
+      </div>}
 
       {/* Footer */}
       <footer className="hidden md:block border-t border-neutral-200 bg-neutral-50">
