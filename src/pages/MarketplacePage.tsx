@@ -27,6 +27,9 @@ interface AccountListing {
   account_details: string;
   image_paths: string[];
   status: ListingStatus;
+  review_status: 'pending' | 'approved' | 'rejected';
+  review_reason: string;
+  ai_review_decision: string;
   created_at: string;
 }
 
@@ -43,6 +46,9 @@ interface HudListing {
   preview_path: string;
   category: string;
   status: 'active' | 'hidden';
+  review_status: 'pending' | 'approved' | 'rejected';
+  review_reason: string;
+  ai_review_decision: string;
   created_at: string;
 }
 
@@ -68,6 +74,17 @@ async function uploadAsset(bucket: string, userId: string, file: File, contentTy
   });
   if (error) throw error;
   return path;
+}
+
+async function requestModeration(listingId: string, listingType: Section) {
+  const { data, error } = await supabase.functions.invoke('moderate-marketplace-listing', {
+    body: { listingId, listingType: listingType === 'accounts' ? 'account' : 'hud' },
+  });
+  const status = (data as { status?: string } | null)?.status;
+  if (status === 'auto_approved') return 'AI review approved your listing and it is now visible.';
+  if (status === 'rejected') return 'AI review rejected the listing. Review the moderation note in your listing.';
+  if (error || status === 'manual_review') return 'Listing submitted. It is hidden while awaiting administrator review.';
+  return 'Listing submitted and is awaiting review.';
 }
 
 export function MarketplacePage() {
@@ -144,9 +161,9 @@ export function MarketplacePage() {
     setEditingHud(null);
   };
 
-  const onSaved = async () => {
+  const onSaved = async (message: string) => {
     closeForm();
-    setNotice('Listing saved.');
+    setNotice(message);
     await loadListings();
   };
 
@@ -233,7 +250,7 @@ export function MarketplacePage() {
   );
 }
 
-function AccountListingForm({ userId, listing, onSaved, onCancel }: { userId: string; listing: AccountListing | null; onSaved: () => void; onCancel: () => void }) {
+function AccountListingForm({ userId, listing, onSaved, onCancel }: { userId: string; listing: AccountListing | null; onSaved: (message: string) => void; onCancel: () => void }) {
   const [title, setTitle] = useState(listing?.title ?? '');
   const [description, setDescription] = useState(listing?.description ?? '');
   const [price, setPrice] = useState(listing ? String(listing.asking_price) : '');
@@ -271,10 +288,10 @@ function AccountListingForm({ userId, listing, onSaved, onCancel }: { userId: st
         image_paths: [...(listing?.image_paths ?? []), ...uploaded],
       };
       const result = listing
-        ? await supabase.from('free_fire_account_listings').update(payload).eq('id', listing.id).eq('seller_id', userId)
-        : await supabase.from('free_fire_account_listings').insert(payload);
+        ? await supabase.from('free_fire_account_listings').update(payload).eq('id', listing.id).eq('seller_id', userId).select('id').single()
+        : await supabase.from('free_fire_account_listings').insert(payload).select('id').single();
       if (result.error) throw result.error;
-      onSaved();
+      await onSaved(await requestModeration(result.data.id, 'accounts'));
     } catch (err) {
       if (uploaded.length) await supabase.storage.from('marketplace').remove(uploaded);
       setError((err as Error).message || 'Could not save listing.');
@@ -303,7 +320,7 @@ function AccountListingForm({ userId, listing, onSaved, onCancel }: { userId: st
   </form></Card>;
 }
 
-function HudListingForm({ userId, listing, onSaved, onCancel }: { userId: string; listing: HudListing | null; onSaved: () => void; onCancel: () => void }) {
+function HudListingForm({ userId, listing, onSaved, onCancel }: { userId: string; listing: HudListing | null; onSaved: (message: string) => void; onCancel: () => void }) {
   const [title, setTitle] = useState(listing?.title ?? '');
   const [description, setDescription] = useState(listing?.description ?? '');
   const [category, setCategory] = useState(listing?.category ?? 'general');
@@ -341,10 +358,10 @@ function HudListingForm({ userId, listing, onSaved, onCancel }: { userId: string
         asking_price: isFree ? 0 : Number(price), hud_file_path: hudPath, preview_path: previewPath,
       };
       const result = listing
-        ? await supabase.from('free_fire_hud_listings').update(payload).eq('id', listing.id).eq('seller_id', userId)
-        : await supabase.from('free_fire_hud_listings').insert(payload);
+        ? await supabase.from('free_fire_hud_listings').update(payload).eq('id', listing.id).eq('seller_id', userId).select('id').single()
+        : await supabase.from('free_fire_hud_listings').insert(payload).select('id').single();
       if (result.error) throw result.error;
-      onSaved();
+      await onSaved(await requestModeration(result.data.id, 'huds'));
     } catch (err) {
       if (uploadedFiles.length) await supabase.storage.from('hud-files').remove(uploadedFiles);
       if (uploadedPreviews.length) await supabase.storage.from('marketplace').remove(uploadedPreviews);
@@ -379,10 +396,11 @@ function AccountListingCard({ listing, isOwner, onEdit, onDelete, onStatus }: { 
       <div className="flex items-start justify-between gap-2"><div><h2 className="font-display text-lg font-bold text-neutral-900">{listing.title}</h2><p className="mt-1 text-xs text-neutral-500">Level {listing.account_level} · {listing.region_server}</p></div><Badge color={listing.status === 'active' ? 'green' : 'neutral'}>{listing.status}</Badge></div>
       <p className="mt-3 line-clamp-3 text-sm text-neutral-600">{listing.description}</p>
       <div className="mt-3 flex flex-wrap gap-1.5">{listing.category && <Badge color="neutral">{listing.category}</Badge>}{listing.available_items && <Badge color="orange">Items listed</Badge>}</div>
+      {isOwner && listing.review_status !== 'approved' && <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3"><Badge color={listing.review_status === 'pending' ? 'amber' : 'red'}>{listing.review_status === 'pending' ? 'Awaiting review' : 'Rejected'}</Badge><p className="mt-2 text-xs text-amber-900">{listing.review_reason || 'This listing is hidden until it is approved.'}</p></div>}
       {(listing.available_items || listing.character_info || listing.account_details) && <details className="mt-3 border-t border-neutral-100 pt-3"><summary className="cursor-pointer text-sm font-semibold text-orange-700">Account details</summary><div className="mt-2 space-y-2 text-sm text-neutral-600">{listing.available_items && <p><strong className="text-neutral-800">Items / skins:</strong> {listing.available_items}</p>}{listing.character_info && <p><strong className="text-neutral-800">Characters:</strong> {listing.character_info}</p>}{listing.account_details && <p><strong className="text-neutral-800">Other details:</strong> {listing.account_details}</p>}</div></details>}
       <div className="mt-4 flex items-center justify-between border-t border-neutral-100 pt-3"><div className="font-display text-xl font-bold text-orange-700">₦{Number(listing.asking_price).toLocaleString()}</div><div className="text-right text-xs text-neutral-500">Seller<br /><span className="font-medium text-neutral-700">{listing.seller_name}</span></div></div>
       {listing.seller_contact && <p className="mt-2 break-all text-xs text-neutral-500">Contact: {listing.seller_contact}</p>}
-      {isOwner && <OwnerActions status={listing.status} onEdit={onEdit} onDelete={onDelete} onStatus={onStatus} />}
+      {isOwner && <OwnerActions status={listing.status} reviewStatus={listing.review_status} onEdit={onEdit} onDelete={onDelete} onStatus={onStatus} />}
     </div>
   </Card>;
 }
@@ -393,17 +411,18 @@ function HudListingCard({ listing, isOwner, isPurchased, isPending, onBuy, onEdi
     <div className="p-4">
       <div className="flex items-start justify-between gap-2"><div><h2 className="font-display text-lg font-bold text-neutral-900">{listing.title}</h2><p className="mt-1 text-xs text-neutral-500">{listing.category} · {listing.device_compatibility || 'Device details not provided'}</p></div><Badge color={listing.status === 'active' ? 'green' : 'neutral'}>{listing.status}</Badge></div>
       <p className="mt-3 line-clamp-3 text-sm text-neutral-600">{listing.description}</p>
+      {isOwner && listing.review_status !== 'approved' && <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3"><Badge color={listing.review_status === 'pending' ? 'amber' : 'red'}>{listing.review_status === 'pending' ? 'Awaiting review' : 'Rejected'}</Badge><p className="mt-2 text-xs text-amber-900">{listing.review_reason || 'This listing is hidden until it is approved.'}</p></div>}
       <div className="mt-4 flex items-center justify-between border-t border-neutral-100 pt-3"><div className="font-display text-xl font-bold text-orange-700">{listing.is_free ? 'Free' : `₦${Number(listing.asking_price).toLocaleString()}`}</div><div className="text-right text-xs text-neutral-500">Shared by<br /><span className="font-medium text-neutral-700">{listing.seller_name}</span></div></div>
       {!isOwner && (listing.status === 'active' || isPurchased) && (listing.is_free || isPurchased ? <Button full className="mt-4" onClick={onDownload}><Download size={16} />Download HUD</Button> : isPending ? <Button full className="mt-4" variant="outline" disabled><ShieldCheck size={16} />Payment under review</Button> : <Button full className="mt-4" onClick={onBuy}><CircleDollarSign size={16} />Purchase HUD</Button>)}
-      {isOwner && <OwnerActions status={listing.status} onEdit={onEdit} onDelete={onDelete} onStatus={(status) => onStatus(status === 'sold' ? 'hidden' : status)} />}
+      {isOwner && <OwnerActions status={listing.status} reviewStatus={listing.review_status} onEdit={onEdit} onDelete={onDelete} onStatus={(status) => onStatus(status === 'sold' ? 'hidden' : status)} />}
     </div>
   </Card>;
 }
 
-function OwnerActions({ status, onEdit, onDelete, onStatus }: { status: ListingStatus; onEdit: () => void; onDelete: () => void; onStatus: (status: ListingStatus) => void }) {
+function OwnerActions({ status, reviewStatus, onEdit, onDelete, onStatus }: { status: ListingStatus; reviewStatus: 'pending' | 'approved' | 'rejected'; onEdit: () => void; onDelete: () => void; onStatus: (status: ListingStatus) => void }) {
   return <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-3">
     <Button size="sm" variant="outline" onClick={onEdit}><Pencil size={14} />Edit</Button>
-    <select aria-label="Listing visibility" className="rounded-lg border border-neutral-200 bg-white px-2.5 py-2 text-xs" value={status} onChange={(event) => onStatus(event.target.value as ListingStatus)}><option value="active">Active</option><option value="hidden">Hidden</option>{status === 'sold' && <option value="sold">Sold</option>}</select>
+    {reviewStatus === 'approved' ? <select aria-label="Listing visibility" className="rounded-lg border border-neutral-200 bg-white px-2.5 py-2 text-xs" value={status} onChange={(event) => onStatus(event.target.value as ListingStatus)}><option value="active">Active</option><option value="hidden">Hidden</option>{status === 'sold' && <option value="sold">Sold</option>}</select> : <Badge color={reviewStatus === 'pending' ? 'amber' : 'red'}>{reviewStatus === 'pending' ? 'In review' : 'Rejected'}</Badge>}
     <button onClick={onDelete} className="ml-auto rounded-lg p-2 text-neutral-500 hover:bg-red-50 hover:text-red-600" title="Delete listing" aria-label="Delete listing"><Trash2 size={16} /></button>
   </div>;
 }

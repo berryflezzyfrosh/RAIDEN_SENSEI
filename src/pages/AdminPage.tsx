@@ -1,20 +1,32 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Shield, Users, Crown, Clock, CheckCircle2, XCircle, Banknote,
-  Search, Ban, RotateCcw, Settings, ScrollText, X, Eye, MessageCircle,
+  Search, Ban, RotateCcw, Settings, ScrollText, X, Eye, MessageCircle, Store,
 } from 'lucide-react';
 import { Card, Button, Badge, Spinner, Input } from '@/components/ui';
 import { useAuth } from '@/hooks/useAuth';
 import { navigate } from '@/hooks/useRouter';
 import { supabase } from '@/lib/supabase';
 import { MessagesPage } from '@/pages/MessagesPage';
+import { AdminMarketplaceTab } from '@/pages/AdminMarketplaceTab';
 import type { AdminUserRow, AdminPaymentRow, AdminLogRow, PaymentStatus } from '@/types';
 
-type Tab = 'overview' | 'users' | 'payments' | 'messages' | 'logs' | 'settings';
+type Tab = 'overview' | 'users' | 'payments' | 'messages' | 'marketplace' | 'logs' | 'settings';
 
 export function AdminPage() {
   const { isAdmin, loading } = useAuth();
   const [tab, setTab] = useState<Tab>('overview');
+  const { data: moderationRows, reload: reloadModeration } = useAdminCall<{ review_status: string }[]>('admin_list_marketplace_moderation');
+  const pendingMarketplaceCount = moderationRows?.filter((listing) => listing.review_status === 'pending').length ?? 0;
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const channel = supabase.channel('admin-marketplace-moderation')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'free_fire_account_listings' }, () => { void reloadModeration(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'free_fire_hud_listings' }, () => { void reloadModeration(); })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [isAdmin, reloadModeration]);
 
   useEffect(() => {
     if (!loading && !isAdmin) navigate('admin-login');
@@ -49,6 +61,7 @@ export function AdminPage() {
           { id: 'users', label: 'Users', icon: Users },
           { id: 'payments', label: 'Payments', icon: Banknote },
           { id: 'messages', label: 'Messages', icon: MessageCircle },
+          { id: 'marketplace', label: 'Marketplace', icon: Store },
           { id: 'logs', label: 'Logs', icon: ScrollText },
           { id: 'settings', label: 'Settings', icon: Settings },
         ] as { id: Tab; label: string; icon: typeof Shield }[]).map((t) => {
@@ -62,6 +75,7 @@ export function AdminPage() {
               }`}
             >
               <Icon size={15} /> {t.label}
+              {t.id === 'marketplace' && pendingMarketplaceCount > 0 && <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">{pendingMarketplaceCount}</span>}
             </button>
           );
         })}
@@ -71,6 +85,7 @@ export function AdminPage() {
       {tab === 'users' && <UsersTab />}
       {tab === 'payments' && <PaymentsTab />}
       {tab === 'messages' && <MessagesPage adminInbox />}
+      {tab === 'marketplace' && <AdminMarketplaceTab />}
       {tab === 'logs' && <LogsTab />}
       {tab === 'settings' && <SettingsTab />}
     </div>
