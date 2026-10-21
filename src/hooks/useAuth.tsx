@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import type { UserProfile } from '@/types';
@@ -22,6 +22,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const [premiumActive, setPremiumActive] = useState(false);
+  const premiumExpiryTimer = useRef<number | null>(null);
 
   const loadProfile = async (uid: string) => {
     const { data, error } = await supabase
@@ -33,17 +34,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.warn('profile load error', error.message);
       setProfile(null);
       setPremiumActive(false);
+      if (premiumExpiryTimer.current !== null) window.clearTimeout(premiumExpiryTimer.current);
+      premiumExpiryTimer.current = null;
       return;
     }
     setProfile(data as UserProfile | null);
     if (!data) {
       setPremiumActive(false);
+      if (premiumExpiryTimer.current !== null) window.clearTimeout(premiumExpiryTimer.current);
+      premiumExpiryTimer.current = null;
       return;
     }
     // Authoritative premium check via server RPC
     const { data: prem } = await supabase.rpc('get_my_premium_status').maybeSingle();
-    setPremiumActive(Boolean((prem as { is_active?: boolean })?.is_active));
+    const status = prem as { is_active?: boolean; expiry_date?: string | null } | null;
+    const isActive = Boolean(status?.is_active);
+    const expiry = status?.expiry_date ? Date.parse(status.expiry_date) : NaN;
+    setPremiumActive(isActive);
+    if (premiumExpiryTimer.current !== null) window.clearTimeout(premiumExpiryTimer.current);
+    premiumExpiryTimer.current = isActive && Number.isFinite(expiry) && expiry > Date.now()
+      ? window.setTimeout(() => { void loadProfile(uid); }, expiry - Date.now() + 250)
+      : null;
   };
+
+  const loadProfileRef = useRef(loadProfile);
+  loadProfileRef.current = loadProfile;
 
   useEffect(() => {
     let mounted = true;
@@ -52,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(data.session);
       const uid = data.session?.user?.id;
       if (uid) {
-        loadProfile(uid).finally(() => mounted && setLoading(false));
+        loadProfileRef.current(uid).finally(() => mounted && setLoading(false));
       } else {
         setLoading(false);
       }
@@ -63,10 +78,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (async () => {
         setSession(sess);
         if (sess?.user?.id) {
-          await loadProfile(sess.user.id);
+          await loadProfileRef.current(sess.user.id);
         } else {
           setProfile(null);
           setPremiumActive(false);
+          if (premiumExpiryTimer.current !== null) window.clearTimeout(premiumExpiryTimer.current);
+          premiumExpiryTimer.current = null;
         }
         setLoading(false);
       })();
@@ -75,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       mounted = false;
       sub.subscription.unsubscribe();
+      if (premiumExpiryTimer.current !== null) window.clearTimeout(premiumExpiryTimer.current);
     };
   }, []);
 
@@ -88,13 +106,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAdmin: profile?.is_admin ?? false,
       refreshProfile: async (userId) => {
         const uid = userId ?? session?.user?.id;
-        if (uid) await loadProfile(uid);
+        if (uid) await loadProfileRef.current(uid);
       },
       signOut: async () => {
         await supabase.auth.signOut();
         setProfile(null);
         setSession(null);
         setPremiumActive(false);
+        if (premiumExpiryTimer.current !== null) window.clearTimeout(premiumExpiryTimer.current);
+        premiumExpiryTimer.current = null;
       },
     };
   }, [session, profile, loading, premiumActive]);

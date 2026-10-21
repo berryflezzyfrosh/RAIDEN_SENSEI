@@ -1,15 +1,16 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Shield, Users, Crown, Clock, CheckCircle2, XCircle, Banknote,
-  Search, Ban, RotateCcw, Settings, ScrollText, X, Eye,
+  Search, Ban, RotateCcw, Settings, ScrollText, X, Eye, MessageCircle,
 } from 'lucide-react';
 import { Card, Button, Badge, Spinner, Input } from '@/components/ui';
 import { useAuth } from '@/hooks/useAuth';
 import { navigate } from '@/hooks/useRouter';
 import { supabase } from '@/lib/supabase';
+import { MessagesPage } from '@/pages/MessagesPage';
 import type { AdminUserRow, AdminPaymentRow, AdminLogRow, PaymentStatus } from '@/types';
 
-type Tab = 'overview' | 'users' | 'payments' | 'logs' | 'settings';
+type Tab = 'overview' | 'users' | 'payments' | 'messages' | 'logs' | 'settings';
 
 export function AdminPage() {
   const { isAdmin, loading } = useAuth();
@@ -47,6 +48,7 @@ export function AdminPage() {
           { id: 'overview', label: 'Overview', icon: Shield },
           { id: 'users', label: 'Users', icon: Users },
           { id: 'payments', label: 'Payments', icon: Banknote },
+          { id: 'messages', label: 'Messages', icon: MessageCircle },
           { id: 'logs', label: 'Logs', icon: ScrollText },
           { id: 'settings', label: 'Settings', icon: Settings },
         ] as { id: Tab; label: string; icon: typeof Shield }[]).map((t) => {
@@ -68,6 +70,7 @@ export function AdminPage() {
       {tab === 'overview' && <Overview />}
       {tab === 'users' && <UsersTab />}
       {tab === 'payments' && <PaymentsTab />}
+      {tab === 'messages' && <MessagesPage adminInbox />}
       {tab === 'logs' && <LogsTab />}
       {tab === 'settings' && <SettingsTab />}
     </div>
@@ -273,6 +276,8 @@ function PaymentsTab() {
                     <Badge color={p.status === 'verified' ? 'green' : p.status === 'rejected' ? 'red' : 'amber'}>
                       {p.status.replace('_', ' ')}
                     </Badge>
+                    <Badge color="neutral">{p.plan ?? 'Legacy plan'}</Badge>
+                    {p.purpose === 'hud' && <Badge color="blue">HUD · {p.hud_listing_id?.slice(0, 8) ?? 'listing'}</Badge>}
                     <span className="font-semibold text-neutral-900">₦{Number(p.amount).toLocaleString()}</span>
                     <span className="text-xs text-neutral-500 font-mono">{p.transaction_reference}</span>
                   </div>

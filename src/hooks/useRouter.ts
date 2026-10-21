@@ -6,6 +6,8 @@ export type Route =
   | { name: 'device' }
   | { name: 'face' }
   | { name: 'premium' }
+  | { name: 'marketplace' }
+  | { name: 'messages' }
   | { name: 'dashboard' }
   | { name: 'profile' }
   | { name: 'login' }
@@ -15,7 +17,7 @@ export type Route =
   | { name: 'admin-login' };
 
 const ROUTE_NAMES = [
-  'home', 'sensitivity', 'device', 'face', 'premium',
+  'home', 'sensitivity', 'device', 'face', 'premium', 'marketplace', 'messages',
   'dashboard', 'profile', 'login', 'signup', 'confirm-email', 'admin', 'admin-login',
 ] as const;
 

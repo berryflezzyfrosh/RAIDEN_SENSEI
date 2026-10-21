@@ -8,6 +8,8 @@ import { DevicePage } from '@/pages/DevicePage';
 import { SensitivityPage } from '@/pages/SensitivityPage';
 import { FacePage } from '@/pages/FacePage';
 import { PremiumPage } from '@/pages/PremiumPage';
+import { MarketplacePage } from '@/pages/MarketplacePage';
+import { MessagesPage } from '@/pages/MessagesPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { ProfilePage } from '@/pages/ProfilePage';
 import { AdminPage } from '@/pages/AdminPage';
@@ -51,6 +53,8 @@ function Router() {
       case 'device': return <DevicePage />;
       case 'face': return <FacePage />;
       case 'premium': return <PremiumPage />;
+      case 'marketplace': return <MarketplacePage />;
+      case 'messages': return user ? <MessagesPage /> : <AuthPage mode="login" />;
       case 'dashboard': return user ? <DashboardPage /> : <AuthPage mode="login" />;
       case 'profile': return user ? <ProfilePage /> : <AuthPage mode="login" />;
       case 'login': return <AuthPage mode="login" />;

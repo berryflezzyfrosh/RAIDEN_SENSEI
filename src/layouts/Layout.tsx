@@ -1,10 +1,11 @@
 import { type ReactNode, useState } from 'react';
-import { Menu, X, LogOut, LayoutDashboard, User as UserIcon, Shield } from 'lucide-react';
+import { Menu, X, LogOut, LayoutDashboard, User as UserIcon, Shield, Store, Home, Crosshair, Smartphone, Smile, Crown, MessageCircle } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { useAuth } from '@/hooks/useAuth';
 import { navigate, type Route } from '@/hooks/useRouter';
 import { Button } from '@/components/ui';
 import { PremiumBadge } from '@/components/PremiumLock';
+import { useMessageNotifications } from '@/hooks/useMessageNotifications';
 
 const NAV: { label: string; route: Route['name']; }[] = [
   { label: 'Home', route: 'home' },
@@ -12,14 +13,18 @@ const NAV: { label: string; route: Route['name']; }[] = [
   { label: 'Device Analysis', route: 'device' },
   { label: 'Face Analysis', route: 'face' },
   { label: 'Premium', route: 'premium' },
+  { label: 'Marketplace', route: 'marketplace' },
+  { label: 'Messages', route: 'messages' },
 ];
 
-const MOBILE_BOTTOM: { label: string; route: Route['name']; icon: typeof Menu }[] = [
-  { label: 'Home', route: 'home', icon: Menu },
-  { label: 'Sens', route: 'sensitivity', icon: Menu },
-  { label: 'Device', route: 'device', icon: Menu },
-  { label: 'Face', route: 'face', icon: Menu },
-  { label: 'Premium', route: 'premium', icon: Menu },
+const MOBILE_BOTTOM: { label: string; route: Route['name']; icon: typeof Home }[] = [
+  { label: 'Home', route: 'home', icon: Home },
+  { label: 'Sens', route: 'sensitivity', icon: Crosshair },
+  { label: 'Device', route: 'device', icon: Smartphone },
+  { label: 'Face', route: 'face', icon: Smile },
+  { label: 'Premium', route: 'premium', icon: Crown },
+  { label: 'Market', route: 'marketplace', icon: Store },
+  { label: 'Messages', route: 'messages', icon: MessageCircle },
 ];
 
 export function Layout({
@@ -30,9 +35,15 @@ export function Layout({
   current: Route['name'];
 }) {
   const { user, profile, isAdmin, isPremium, signOut } = useAuth();
+  const { unreadCount, notice, clearNotice } = useMessageNotifications();
   const [open, setOpen] = useState(false);
 
   const isActive = (r: Route['name']) => current === r;
+  const openNotice = () => {
+    if (notice?.conversationId) window.location.hash = `/messages?conversation=${notice.conversationId}`;
+    else navigate('messages');
+    clearNotice();
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -55,6 +66,7 @@ export function Layout({
                   }`}
                 >
                   {item.label}
+                  {item.route === 'messages' && unreadCount > 0 && <span className="ml-1 rounded-full bg-orange-600 px-1.5 py-0.5 text-[10px] text-white">{unreadCount}</span>}
                 </button>
               ))}
               {user && (
@@ -144,6 +156,7 @@ export function Layout({
                   }`}
                 >
                   {item.label}
+                  {item.route === 'messages' && unreadCount > 0 && <span className="ml-2 rounded-full bg-orange-600 px-1.5 py-0.5 text-[10px] text-white">{unreadCount}</span>}
                 </button>
               ))}
               {user && (
@@ -199,7 +212,7 @@ export function Layout({
 
       {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 glass border-t border-neutral-200/70">
-        <div className="grid grid-cols-5">
+        <div className="grid grid-cols-7">
           {MOBILE_BOTTOM.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.route);
@@ -207,17 +220,20 @@ export function Layout({
               <button
                 key={item.route}
                 onClick={() => navigate(item.route)}
-                className={`flex flex-col items-center justify-center py-2.5 text-[11px] font-medium transition ${
+                className={`relative flex flex-col items-center justify-center py-2.5 text-[11px] font-medium transition ${
                   active ? 'text-orange-600' : 'text-neutral-500'
                 }`}
               >
                 <Icon size={18} className={active ? 'text-orange-600' : 'text-neutral-400'} />
-                {item.label}
+                <span className="text-[10px]">{item.label}</span>
+                {item.route === 'messages' && unreadCount > 0 && <span className="absolute right-[7%] top-1 rounded-full bg-orange-600 px-1 text-[9px] leading-4 text-white">{unreadCount}</span>}
               </button>
             );
           })}
         </div>
       </nav>
+
+      {notice && <div className="fixed bottom-20 right-4 z-50 flex max-w-sm items-center gap-3 rounded-lg border border-orange-200 bg-white p-3 shadow-lg md:bottom-5" role="status"><MessageCircle size={18} className="shrink-0 text-orange-600" /><p className="flex-1 text-sm text-neutral-800">New private message received.</p><button onClick={openNotice} className="text-sm font-semibold text-orange-700 hover:text-orange-800">Open</button><button onClick={clearNotice} aria-label="Dismiss notification" className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100"><X size={15} /></button></div>}
 
       {/* Footer */}
       <footer className="hidden md:block border-t border-neutral-200 bg-neutral-50">

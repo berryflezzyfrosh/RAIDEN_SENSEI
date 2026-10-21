@@ -6,10 +6,15 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAppConfig } from '@/hooks/useAppConfig';
 import { navigate } from '@/hooks/useRouter';
 import { supabase } from '@/lib/supabase';
-import type { Payment, PaymentStatus } from '@/types';
+import type { Payment, PaymentStatus, PremiumPlan } from '@/types';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+const PLANS: { id: PremiumPlan; label: string; price: number; duration: string }[] = [
+  { id: 'weekly', label: 'Weekly', price: 2500, duration: '7 days' },
+  { id: 'monthly', label: 'Monthly', price: 7000, duration: '30 days' },
+  { id: 'yearly', label: 'Yearly', price: 50000, duration: '365 days' },
+];
 
 export function PremiumPage() {
   const { user, isPremium, refreshProfile } = useAuth();
@@ -19,8 +24,10 @@ export function PremiumPage() {
   const [, setLoadingPay] = useState(true);
   const [showPayForm, setShowPayForm] = useState(false);
   const [resumePayment, setResumePayment] = useState<Payment | null>(null);
-
-  const price = Number(config.premium_price || '2500');
+  const [selectedPlan, setSelectedPlan] = useState<PremiumPlan>('weekly');
+  const [expiryDate, setExpiryDate] = useState<string | null>(null);
+  const selectedPlanDetails = PLANS.find((plan) => plan.id === selectedPlan) ?? PLANS[0];
+  const price = selectedPlanDetails.price;
 
   const loadPayments = useCallback(async () => {
     if (!user) { setLoadingPay(false); return; }
@@ -50,6 +57,13 @@ export function PremiumPage() {
   }, [user]);
 
   useEffect(() => { loadPayments(); }, [loadPayments]);
+
+  useEffect(() => {
+    if (!user || !isPremium) { setExpiryDate(null); return; }
+    supabase.rpc('get_my_premium_status').maybeSingle().then(({ data }) => {
+      setExpiryDate((data as { expiry_date?: string | null } | null)?.expiry_date ?? null);
+    });
+  }, [isPremium, user]);
 
   const copyAccount = async () => {
     try {
@@ -84,6 +98,7 @@ export function PremiumPage() {
           </div>
           <h1 className="mt-4 font-display text-2xl font-bold text-neutral-900">You're Premium</h1>
           <p className="mt-2 text-neutral-600">All premium features are unlocked. Enjoy the pro engine.</p>
+          {expiryDate && <p className="mt-2 text-sm text-neutral-500">Access through {new Date(expiryDate).toLocaleDateString()}.</p>}
           <div className="mt-5 flex justify-center">
             <PremiumBadge>PREMIUM ACTIVE</PremiumBadge>
           </div>
@@ -103,8 +118,25 @@ export function PremiumPage() {
         <h1 className="mt-3 font-display text-3xl sm:text-4xl font-bold text-neutral-900">
           Unlock <span className="text-gradient-orange">Premium</span>
         </h1>
-        <p className="mt-2 text-neutral-500 text-sm">Pay ₦{price.toLocaleString()} once. Unlock the full pro engine.</p>
+        <p className="mt-2 text-neutral-500 text-sm">Choose a plan to unlock the full pro engine.</p>
       </header>
+
+      <div className="grid gap-3 sm:grid-cols-3 mb-5" role="radiogroup" aria-label="Premium subscription plan">
+        {PLANS.map((plan) => (
+          <button
+            key={plan.id}
+            type="button"
+            role="radio"
+            aria-checked={selectedPlan === plan.id}
+            onClick={() => setSelectedPlan(plan.id)}
+            className={`rounded-xl border p-4 text-left transition ${selectedPlan === plan.id ? 'border-orange-500 bg-orange-50 ring-2 ring-orange-200' : 'border-neutral-200 bg-white hover:border-orange-300'}`}
+          >
+            <span className="block font-semibold text-neutral-900">{plan.label}</span>
+            <span className="mt-1 block text-xl font-display font-bold text-orange-700">₦{plan.price.toLocaleString()}</span>
+            <span className="mt-1 block text-xs text-neutral-500">{plan.duration} of access</span>
+          </button>
+        ))}
+      </div>
 
       {/* Features */}
       <Card className="p-6 mb-5 animate-fade-up">
@@ -148,7 +180,8 @@ export function PremiumPage() {
           <p className="mt-1 text-sm text-neutral-500">Your payment record was saved, but the receipt upload did not finish.</p>
           <PaymentForm
             key={resumePayment.id}
-            price={price}
+            plan={resumePayment.plan ?? selectedPlan}
+            price={Number(resumePayment.amount)}
             config={config}
             copied={copied}
             onCopy={copyAccount}
@@ -175,12 +208,12 @@ export function PremiumPage() {
         <Card className="p-6 animate-fade-up">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <h2 className="font-display font-bold text-neutral-900 text-lg">Premium access</h2>
-              <p className="text-sm text-neutral-500">One-time payment. Activated after verification.</p>
+              <h2 className="font-display font-bold text-neutral-900 text-lg">{selectedPlanDetails.label} Premium</h2>
+              <p className="text-sm text-neutral-500">Activated after your payment is verified.</p>
             </div>
             <div className="text-right">
               <div className="text-3xl font-display font-extrabold text-gradient-orange">₦{price.toLocaleString()}</div>
-              <div className="text-xs text-neutral-500">one-time</div>
+              <div className="text-xs text-neutral-500">{selectedPlanDetails.duration}</div>
             </div>
           </div>
           <Button full size="lg" className="mt-5" variant="premium" onClick={() => setShowPayForm(true)}>
@@ -189,6 +222,7 @@ export function PremiumPage() {
         </Card>
       ) : (
         <PaymentForm
+          plan={selectedPlan}
           price={price}
           config={config}
           copied={copied}
@@ -202,8 +236,9 @@ export function PremiumPage() {
 }
 
 function PaymentForm({
-  price, config, copied, onCopy, paymentId, initialReference, onSubmitted, onCancel,
+  plan, price, config, copied, onCopy, paymentId, initialReference, onSubmitted, onCancel,
 }: {
+  plan: PremiumPlan;
   price: number;
   config: { opay_bank: string; opay_account_name: string; opay_account_number: string };
   copied: boolean;
@@ -253,7 +288,7 @@ function PaymentForm({
       if (!targetPaymentId) {
         const { data: payData, error: payErr } = await supabase
           .from('payments')
-          .insert({ amount: price, transaction_reference: ref.trim() })
+          .insert({ amount: price, plan, transaction_reference: ref.trim() })
           .select('id')
           .single();
         if (payErr) throw payErr;
@@ -422,6 +457,7 @@ function PaymentStatusCard({ payment }: { payment: Payment }) {
         </div>
         <p className="text-xs text-neutral-500 mt-0.5">{m.desc}</p>
         <div className="mt-1.5 text-xs text-neutral-400">
+          {payment.plan && <span className="capitalize">{payment.plan} plan · </span>}
           Ref: <span className="font-mono">{payment.transaction_reference}</span> • ₦{Number(payment.amount).toLocaleString()}
         </div>
       </div>

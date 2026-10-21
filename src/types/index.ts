@@ -7,6 +7,7 @@ export type PaymentStatus =
   | 'rejected'
   | 'refunded'
   | 'expired';
+export type PremiumPlan = 'weekly' | 'monthly' | 'yearly';
 
 export interface UserProfile {
   id: string;
@@ -31,6 +32,7 @@ export interface Payment {
   id: string;
   user_id: string;
   amount: number;
+  plan: PremiumPlan | null;
   transaction_reference: string;
   status: PaymentStatus;
   review_note: string;
@@ -129,6 +131,9 @@ export interface AdminPaymentRow {
   id: string;
   user_id: string;
   amount: number;
+  plan: PremiumPlan | null;
+  purpose: 'premium' | 'hud';
+  hud_listing_id: string | null;
   transaction_reference: string;
   status: PaymentStatus;
   review_note: string;
