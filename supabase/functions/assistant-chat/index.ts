@@ -71,25 +71,19 @@ Deno.serve(async (request: Request) => {
       conversationId = conversation.id;
     }
 
-    const { error: saveUserError } = await admin.from("ai_messages").insert({
-      conversation_id: conversationId,
-      role: "user",
-      content: message,
-    });
-    if (saveUserError) return json({ error: "Could not save your message." }, 500);
-
     const { data: history, error: historyError } = await admin
       .from("ai_messages")
       .select("role, content")
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: false })
-      .limit(16);
+      .limit(15);
     if (historyError) return json({ error: "Could not load conversation context." }, 500);
 
     const chatHistory = (history ?? []).reverse().map((item) => ({
       role: item.role as "user" | "assistant",
       content: item.content,
     }));
+    chatHistory.push({ role: "user", content: message });
     const assistantName = profile.display_name || "player";
     const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -121,12 +115,11 @@ Deno.serve(async (request: Request) => {
     const reply = choices?.[0]?.message?.content?.trim();
     if (!reply) return json({ error: "The AI Assistant returned an empty response. Please try again." }, 502);
 
-    const { error: saveAssistantError } = await admin.from("ai_messages").insert({
-      conversation_id: conversationId,
-      role: "assistant",
-      content: reply,
-    });
-    if (saveAssistantError) return json({ error: "The response was generated but could not be saved." }, 500);
+    const { error: saveMessagesError } = await admin.from("ai_messages").insert([
+      { conversation_id: conversationId, role: "user", content: message },
+      { conversation_id: conversationId, role: "assistant", content: reply },
+    ]);
+    if (saveMessagesError) return json({ error: "The response was generated but could not be saved." }, 500);
 
     await admin.from("ai_conversations").update({ updated_at: new Date().toISOString() })
       .eq("id", conversationId).eq("user_id", userData.user.id);
