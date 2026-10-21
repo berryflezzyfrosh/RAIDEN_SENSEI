@@ -109,17 +109,17 @@ Deno.serve(async (request: Request) => {
     const result = await aiResponse.json().catch(() => ({} as Record<string, unknown>));
     if (!aiResponse.ok) {
       console.error("AI provider request failed", aiResponse.status);
-      return json({ error: "The AI Assistant is temporarily unavailable. Your message was saved; please try again." }, 502);
+      return json({ conversationId, error: "The AI Assistant is temporarily unavailable. Your message is ready to retry." }, 502);
     }
     const choices = result.choices as { message?: { content?: string } }[] | undefined;
     const reply = choices?.[0]?.message?.content?.trim();
-    if (!reply) return json({ error: "The AI Assistant returned an empty response. Please try again." }, 502);
+    if (!reply) return json({ conversationId, error: "The AI Assistant returned an empty response. Please try again." }, 502);
 
     const { error: saveMessagesError } = await admin.from("ai_messages").insert([
       { conversation_id: conversationId, role: "user", content: message },
       { conversation_id: conversationId, role: "assistant", content: reply },
     ]);
-    if (saveMessagesError) return json({ error: "The response was generated but could not be saved." }, 500);
+    if (saveMessagesError) return json({ conversationId, error: "The response was generated but could not be saved." }, 500);
 
     await admin.from("ai_conversations").update({ updated_at: new Date().toISOString() })
       .eq("id", conversationId).eq("user_id", userData.user.id);

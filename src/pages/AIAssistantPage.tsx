@@ -128,6 +128,10 @@ export function AIAssistantPage({ floating = false }: { floating?: boolean }) {
     ]);
     setDraft('');
     setSendingText('');
+      if (data?.conversationId) {
+        setActiveId(data.conversationId);
+        await loadConversations();
+      }
     setSending(false);
     await loadConversations();
   };
