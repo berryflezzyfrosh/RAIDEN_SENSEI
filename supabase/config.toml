@@ -3,3 +3,6 @@ verify_jwt = false
 
 [functions.receipt-review]
 verify_jwt = true
+
+[functions.assistant-chat]
+verify_jwt = true

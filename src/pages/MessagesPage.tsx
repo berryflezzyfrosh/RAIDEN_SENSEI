@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, Ban, Check, CheckCheck, CircleUserRound, Headset,
+  AlertTriangle, ArrowLeft, Ban, Check, CheckCheck, CircleUserRound, Headset,
   MessageCircle, MessageSquarePlus, Search, Send, Shield, ShieldCheck, Trash2, X,
 } from 'lucide-react';
 import { Badge, Button, Card, Spinner } from '@/components/ui';
@@ -65,9 +65,11 @@ export function MessagesPage({ adminInbox = false }: { adminInbox?: boolean }) {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(initialConversationId);
   const [query, setQuery] = useState('');
+  const [sidebarView, setSidebarView] = useState<'chats' | 'people'>('chats');
   const [conversationSearch, setConversationSearch] = useState('');
-  const [searchResults, setSearchResults] = useState<MessageSearchResult[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [people, setPeople] = useState<MessageSearchResult[]>([]);
+  const [peopleLoading, setPeopleLoading] = useState(false);
+  const [peopleHasMore, setPeopleHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [profilePreview, setProfilePreview] = useState<MessageSearchResult | null>(null);
@@ -107,19 +109,27 @@ export function MessagesPage({ adminInbox = false }: { adminInbox?: boolean }) {
   }, []);
 
   useEffect(() => {
-    const term = query.trim();
-    if (adminInbox || term.length < 2) { setSearchResults([]); return; }
+    if (adminInbox || sidebarView !== 'people' || !user) return;
     let active = true;
-    setSearching(true);
+    setPeopleLoading(true);
+    const term = query.trim();
     const timer = window.setTimeout(async () => {
-      const { data, error: searchError } = await supabase.rpc('search_message_users', { p_query: term });
+      const { data, error: searchError } = await supabase.rpc('list_message_users', {
+        p_query: term || null,
+        p_limit: 40,
+        p_offset: 0,
+      });
       if (!active) return;
-      setSearching(false);
+      setPeopleLoading(false);
       if (searchError) setError(searchError.message);
-      else setSearchResults((data ?? []) as MessageSearchResult[]);
-    }, 250);
+      else {
+        const results = (data ?? []) as MessageSearchResult[];
+        setPeople(results);
+        setPeopleHasMore(results.length === 40);
+      }
+    }, term ? 250 : 0);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [adminInbox, query]);
+  }, [adminInbox, query, sidebarView, user]);
 
   const activeConversation = conversations.find((conversation) => conversation.conversation_id === activeId) ?? null;
   const visibleConversations = useMemo(() => conversations.filter((conversation) => {
@@ -133,9 +143,26 @@ export function MessagesPage({ adminInbox = false }: { adminInbox?: boolean }) {
     if (openError || !data) { setError(openError?.message ?? 'Could not open this conversation.'); return; }
     setActiveId(data as string);
     setQuery('');
-    setSearchResults([]);
+    setSidebarView('chats');
     await loadConversations();
   }, [loadConversations]);
+
+  const loadMorePeople = async () => {
+    if (peopleLoading || !peopleHasMore) return;
+    setPeopleLoading(true);
+    const { data, error: peopleError } = await supabase.rpc('list_message_users', {
+      p_query: query.trim() || null,
+      p_limit: 40,
+      p_offset: people.length,
+    });
+    if (peopleError) setError(peopleError.message);
+    else {
+      const nextPage = (data ?? []) as MessageSearchResult[];
+      setPeople((current) => [...current, ...nextPage]);
+      setPeopleHasMore(nextPage.length === 40);
+    }
+    setPeopleLoading(false);
+  };
 
   const contactSupport = async () => {
     const { data, error: supportError } = await supabase.rpc('get_support_account').maybeSingle();
@@ -195,11 +222,12 @@ export function MessagesPage({ adminInbox = false }: { adminInbox?: boolean }) {
         </div>
       ) : (
         <div className="grid min-h-[min(72vh,760px)] gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <Card className="flex min-h-[360px] flex-col overflow-hidden">
-            {!adminInbox && <div className="border-b border-neutral-100 p-3"><div className="relative"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" /><input className={`${inputClass} pl-9`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find a player" /></div>{(searching || query.trim().length >= 2) && <div className="mt-2 max-h-56 overflow-y-auto">{searching ? <div className="p-3 text-center text-xs text-neutral-500">Searching...</div> : searchResults.length ? searchResults.map((result) => <div key={result.user_id} className="flex items-center gap-2 rounded-lg p-2 hover:bg-neutral-50"><button className="min-w-0 flex-1 text-left" onClick={() => setProfilePreview(result)}><UserAvatar name={result.display_name} src={result.avatar_url} /><span className="ml-2 inline-block max-w-[145px] truncate align-middle text-sm font-medium text-neutral-800">{result.display_name}</span>{result.is_admin && <ShieldCheck size={13} className="ml-1 inline text-orange-600" />}</button><button onClick={() => openConversation(result.user_id)} className="rounded-lg p-2 text-orange-600 hover:bg-orange-50" title="Message user" aria-label={`Message ${result.display_name}`}><MessageSquarePlus size={16} /></button></div>) : query.trim().length >= 2 ? <p className="p-3 text-center text-xs text-neutral-500">No users found.</p> : null}</div>}</div>}
+          <div className={activeConversation ? 'hidden lg:block' : 'block'}><Card className="flex min-h-[360px] flex-col overflow-hidden">
+            {!adminInbox && <div className="grid grid-cols-2 gap-1 border-b border-neutral-100 p-2"><button onClick={() => { setSidebarView('chats'); setQuery(''); }} className={`rounded-lg px-3 py-2 text-sm font-semibold ${sidebarView === 'chats' ? 'bg-orange-50 text-orange-700' : 'text-neutral-500 hover:bg-neutral-50'}`}>Chats <span className="ml-1 text-xs opacity-70">{conversations.length}</span></button><button onClick={() => setSidebarView('people')} className={`rounded-lg px-3 py-2 text-sm font-semibold ${sidebarView === 'people' ? 'bg-orange-50 text-orange-700' : 'text-neutral-500 hover:bg-neutral-50'}`}>People</button></div>}
+            {!adminInbox && sidebarView === 'people' && <div className="border-b border-neutral-100 p-3"><div className="relative"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" /><input className={`${inputClass} pl-9`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search all players" /></div></div>}
             {adminInbox && <div className="border-b border-neutral-100 p-3"><div className="relative"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" /><input className={`${inputClass} pl-9`} value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} placeholder="Search support conversations" /></div></div>}
-            <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3"><h2 className="text-sm font-semibold text-neutral-800">Conversations</h2>{!adminInbox && <span className="text-xs text-neutral-400">{conversations.length}</span>}</div>
-            <div className="flex-1 overflow-y-auto">
+            {(adminInbox || sidebarView === 'chats') && <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3"><h2 className="text-sm font-semibold text-neutral-800">{adminInbox ? 'Conversations' : 'Your conversations'}</h2></div>}
+            {sidebarView === 'chats' || adminInbox ? <div className="flex-1 overflow-y-auto">
               {loading ? <Spinner label="Loading inbox..." /> : visibleConversations.length === 0 ? <div className="p-6 text-center text-sm text-neutral-500"><MessageCircle size={22} className="mx-auto mb-2 text-neutral-300" />No conversations found.</div> : visibleConversations.map((conversation) => (
                 <div key={conversation.conversation_id} className={`group flex items-start border-b border-neutral-100 hover:bg-neutral-50 ${activeId === conversation.conversation_id ? 'bg-orange-50/70' : ''}`}>
                   <button onClick={() => setActiveId(conversation.conversation_id)} className="flex min-w-0 flex-1 items-start gap-3 px-4 py-3 text-left">
@@ -209,11 +237,15 @@ export function MessagesPage({ adminInbox = false }: { adminInbox?: boolean }) {
                   <button onClick={() => void hideConversation(conversation.conversation_id)} aria-label="Remove conversation" title="Remove from inbox" className="mt-2 mr-2 rounded-md p-1.5 text-neutral-400 opacity-0 hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 focus:opacity-100"><Trash2 size={14} /></button>
                 </div>
               ))}
-            </div>
-          </Card>
-          <Card className="flex min-h-[360px] flex-col overflow-hidden">
+            </div> : <div className="flex-1 overflow-y-auto">
+              {peopleLoading && people.length === 0 ? <Spinner label="Loading players..." /> : people.length === 0 ? <div className="p-6 text-center text-sm text-neutral-500"><CircleUserRound size={24} className="mx-auto mb-2 text-neutral-300" />No players found.</div> : people.map((person) => <div key={person.user_id} className="flex items-center gap-2 border-b border-neutral-100 px-3 py-3 hover:bg-neutral-50"><button className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => setProfilePreview(person)}><UserAvatar name={person.display_name} src={person.avatar_url} /><span className="truncate text-sm font-medium text-neutral-800">{person.display_name}{person.is_admin && <ShieldCheck size={13} className="ml-1 inline text-orange-600" />}</span></button><button onClick={() => void openConversation(person.user_id)} className="rounded-lg p-2 text-orange-600 hover:bg-orange-50" title={`Message ${person.display_name}`} aria-label={`Message ${person.display_name}`}><MessageSquarePlus size={16} /></button></div>)}
+              {peopleHasMore && <div className="p-3 text-center"><Button size="sm" variant="outline" loading={peopleLoading} onClick={loadMorePeople}>Load more players</Button></div>}
+            </div>}
+          </Card></div>
+          <div className={!activeConversation ? 'hidden lg:block' : 'block'}><Card className="flex min-h-[min(72vh,760px)] flex-col overflow-hidden">
+            {activeConversation && <div className="border-b border-neutral-100 p-2 lg:hidden"><button onClick={() => setActiveId(null)} className="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-neutral-600 hover:bg-neutral-100"><ArrowLeft size={16} />All conversations</button></div>}
             {activeConversation ? <MessageThread key={activeConversation.conversation_id} conversation={activeConversation} onUpdated={loadConversations} onRead={refreshUnread} /> : <div className="flex flex-1 flex-col items-center justify-center p-8 text-center text-neutral-500"><MessageCircle size={36} className="text-neutral-300" /><h2 className="mt-3 font-display font-bold text-neutral-800">Choose a conversation</h2><p className="mt-1 text-sm">Your private messages and support threads appear here.</p></div>}
-          </Card>
+          </Card></div>
         </div>
       )}
 
@@ -334,8 +366,8 @@ function MessageThread({ conversation, onUpdated, onRead }: { conversation: Conv
     </div>
     {error && <div className="border-t border-neutral-100 px-4 py-2 text-xs text-red-700">{error}</div>}
     {success && <div className="border-t border-neutral-100 bg-emerald-50 px-4 py-2 text-xs text-emerald-800">{success}</div>}
-    {blockedMe ? <div className="border-t border-neutral-100 p-4 text-center text-sm text-neutral-500">This user has restricted new messages.</div> : iBlocked ? <div className="border-t border-neutral-100 p-4 text-center text-sm text-neutral-500">You blocked this user. Unblock them to send a message.</div> : <form onSubmit={send} className="flex items-end gap-2 border-t border-neutral-100 p-3"><textarea className={`${inputClass} max-h-32 min-h-11 resize-y`} value={body} onChange={(event) => setBody(event.target.value)} maxLength={4000} placeholder="Write a message..." aria-label="Message" onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(event); } }} /><Button type="submit" loading={sending} disabled={!body.trim()} aria-label="Send message"><Send size={16} />Send</Button></form>}
-    {showReport && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowReport(null)}><div className="w-full max-w-md" onClick={(event) => event.stopPropagation()}><Card className="p-5"><h3 className="font-display text-lg font-bold text-neutral-900">Report message</h3><p className="mt-1 text-sm text-neutral-500">Administrators will review this message and your reason.</p><textarea className={`${inputClass} mt-4 min-h-24`} value={reportReason} onChange={(event) => setReportReason(event.target.value)} maxLength={1000} placeholder="What is the issue?" /><div className="mt-4 flex justify-end gap-2"><Button variant="ghost" onClick={() => setShowReport(null)}>Cancel</Button><Button variant="danger" loading={reporting} onClick={() => void reportMessage(showReport)}><AlertTriangle size={15} />Submit report</Button></div></Card></div></div>}
+    {blockedMe ? <div className="border-t border-neutral-100 p-4 text-center text-sm text-neutral-500">This user has restricted new messages.</div> : iBlocked ? <div className="border-t border-neutral-100 p-4 text-center text-sm text-neutral-500">You blocked this user. Unblock them to send a message.</div> : <form onSubmit={send} className="flex items-end gap-2 border-t border-neutral-100 p-3"><textarea rows={1} className={`${inputClass} h-11 min-h-11 max-h-28 resize-none overflow-y-auto`} value={body} onChange={(event) => setBody(event.target.value)} maxLength={4000} placeholder="Write a message..." aria-label="Message" onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(event); } }} /><Button type="submit" loading={sending} disabled={!body.trim()} aria-label="Send message"><Send size={16} />Send</Button></form>}
+    {showReport && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowReport(null)}><div className="w-full max-w-md" onClick={(event) => event.stopPropagation()}><Card className="p-5"><h3 className="font-display text-lg font-bold text-neutral-900">Report message</h3><p className="mt-1 text-sm text-neutral-500">Administrators will review this message and your reason.</p><textarea rows={4} className={`${inputClass} mt-4 resize-none`} value={reportReason} onChange={(event) => setReportReason(event.target.value)} maxLength={1000} placeholder="What is the issue?" /><div className="mt-4 flex justify-end gap-2"><Button variant="ghost" onClick={() => setShowReport(null)}>Cancel</Button><Button variant="danger" loading={reporting} onClick={() => void reportMessage(showReport)}><AlertTriangle size={15} />Submit report</Button></div></Card></div></div>}
   </>;
 }
 

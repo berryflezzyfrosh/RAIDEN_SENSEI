@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from 'react';
-import { Menu, X, LogOut, LayoutDashboard, User as UserIcon, Shield, Store, Home, Crosshair, Smartphone, Smile, Crown, MessageCircle } from 'lucide-react';
+import { Menu, X, LogOut, LayoutDashboard, User as UserIcon, Shield, Store, Home, Crosshair, Smartphone, Smile, Crown, MessageCircle, Bot } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { useAuth } from '@/hooks/useAuth';
 import { navigate, type Route } from '@/hooks/useRouter';
@@ -15,6 +15,7 @@ const NAV: { label: string; route: Route['name']; }[] = [
   { label: 'Premium', route: 'premium' },
   { label: 'Marketplace', route: 'marketplace' },
   { label: 'Messages', route: 'messages' },
+  { label: 'AI Assistant', route: 'assistant' },
 ];
 
 const MOBILE_BOTTOM: { label: string; route: Route['name']; icon: typeof Home }[] = [
@@ -25,6 +26,7 @@ const MOBILE_BOTTOM: { label: string; route: Route['name']; icon: typeof Home }[
   { label: 'Premium', route: 'premium', icon: Crown },
   { label: 'Market', route: 'marketplace', icon: Store },
   { label: 'Messages', route: 'messages', icon: MessageCircle },
+  { label: 'AI', route: 'assistant', icon: Bot },
 ];
 
 export function Layout({
