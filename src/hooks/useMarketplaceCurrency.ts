@@ -27,7 +27,7 @@ const COUNTRY_CACHE = 'raiden-marketplace-country-v1';
 const RATE_CACHE_MS = 12 * 60 * 60 * 1000;
 const COUNTRY_CACHE_MS = 24 * 60 * 60 * 1000;
 
-export const CURRENCY_OPTIONS = [
+const FALLBACK_CURRENCY_OPTIONS = [
   ['NGN', 'Nigerian naira'], ['GHS', 'Ghanaian cedi'], ['KES', 'Kenyan shilling'],
   ['ZAR', 'South African rand'], ['GMD', 'Gambian dalasi'], ['XOF', 'West African CFA franc'],
   ['XAF', 'Central African CFA franc'], ['UGX', 'Ugandan shilling'], ['TZS', 'Tanzanian shilling'],
@@ -35,6 +35,32 @@ export const CURRENCY_OPTIONS = [
   ['INR', 'Indian rupee'], ['AED', 'UAE dirham'], ['SAR', 'Saudi riyal'], ['AUD', 'Australian dollar'],
   ['JPY', 'Japanese yen'], ['BRL', 'Brazilian real'],
 ] as const;
+
+interface CurrencyDisplayNames {
+  of(code: string): string | undefined;
+}
+
+const intlWithCurrencyCatalog = Intl as typeof Intl & {
+  supportedValuesOf?: (key: 'currency') => string[];
+  DisplayNames?: new (locales: string | string[] | undefined, options: { type: 'currency' }) => CurrencyDisplayNames;
+};
+
+function getCurrencyOptions(): readonly (readonly [string, string])[] {
+  let codes: string[];
+  try {
+    codes = intlWithCurrencyCatalog.supportedValuesOf?.call(Intl, 'currency')
+      ?? FALLBACK_CURRENCY_OPTIONS.map(([code]) => code);
+  } catch {
+    codes = FALLBACK_CURRENCY_OPTIONS.map(([code]) => code);
+  }
+
+  const displayNames = intlWithCurrencyCatalog.DisplayNames
+    ? new intlWithCurrencyCatalog.DisplayNames(undefined, { type: 'currency' })
+    : null;
+  return codes.map((code) => [code, displayNames?.of(code) ?? FALLBACK_CURRENCY_OPTIONS.find(([fallbackCode]) => fallbackCode === code)?.[1] ?? code] as const);
+}
+
+export const CURRENCY_OPTIONS = getCurrencyOptions();
 
 function readCache<T>(key: string): T | null {
   try {
@@ -102,6 +128,7 @@ export function useMarketplaceCurrency() {
   }, []);
 
   const currencyLabel = useMemo(() => CURRENCY_OPTIONS.find(([code]) => code === currency)?.[1] ?? currency, [currency]);
+  const hasCurrencyRate = currency === 'NGN' || Boolean(ratesReady && rates[currency] && Number.isFinite(rates[currency]));
   const formatNaira = (amount: number) => {
     const rate = rates[currency];
     if (currency === 'NGN' || !rate || !Number.isFinite(rate)) {
@@ -110,5 +137,5 @@ export function useMarketplaceCurrency() {
     return new Intl.NumberFormat(undefined, { style: 'currency', currency, maximumFractionDigits: 2 }).format(amount * rate);
   };
 
-  return { currency, setCurrency, currencyLabel, countryName, ratesReady, formatNaira };
+  return { currency, setCurrency, currencyLabel, countryName, ratesReady, hasCurrencyRate, formatNaira };
 }

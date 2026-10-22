@@ -91,13 +91,14 @@ async function requestModeration(listingId: string, listingType: Section) {
 export function MarketplacePage() {
   const { user } = useAuth();
   const { config } = useAppConfig();
-  const { currency, setCurrency, currencyLabel, countryName, ratesReady, formatNaira } = useMarketplaceCurrency();
+  const { currency, setCurrency, currencyLabel, countryName, hasCurrencyRate, formatNaira } = useMarketplaceCurrency();
   const [section, setSection] = useState<Section>('accounts');
   const [accounts, setAccounts] = useState<AccountListing[]>([]);
   const [huds, setHuds] = useState<HudListing[]>([]);
   const [purchasedHudIds, setPurchasedHudIds] = useState<string[]>([]);
   const [pendingHudIds, setPendingHudIds] = useState<string[]>([]);
   const [query, setQuery] = useState('');
+  const [currencyQuery, setCurrencyQuery] = useState('');
   const [category, setCategory] = useState('all');
   const [mineOnly, setMineOnly] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -156,6 +157,12 @@ export function MarketplacePage() {
       && (category === 'all' || listing.category === category)
       && text.includes(query.trim().toLowerCase());
   }), [category, huds, mineOnly, query, user?.id]);
+
+  const filteredCurrencies = useMemo(() => {
+    const term = currencyQuery.trim().toLowerCase();
+    return CURRENCY_OPTIONS.filter(([code, label]) => code === currency
+      || `${code} ${label}`.toLowerCase().includes(term));
+  }, [currency, currencyQuery]);
 
   const closeForm = () => {
     setFormOpen(false);
@@ -226,9 +233,9 @@ export function MarketplacePage() {
       <div className="mb-2 grid gap-3 sm:grid-cols-[minmax(0,1fr)_190px_190px]">
         <label className="relative block"><Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" /><input className={`${fieldClass} pl-9`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={section === 'accounts' ? 'Search titles, items, characters, regions...' : 'Search HUDs, devices, layouts...'} /></label>
         <label className="relative block"><Filter size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" /><select className={`${fieldClass} appearance-none pl-9 pr-9 capitalize`} value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">All categories</option>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select><ChevronDown size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" /></label>
-        <label className="block text-xs font-medium text-neutral-500">Display currency<select className={`${fieldClass} mt-1`} value={currency} onChange={(event) => setCurrency(event.target.value)}>{CURRENCY_OPTIONS.map(([code, label]) => <option key={code} value={code}>{code} · {label}</option>)}{!CURRENCY_OPTIONS.some(([code]) => code === currency) && <option value={currency}>{currency} · detected</option>}</select></label>
+        <label className="block text-xs font-medium text-neutral-500">Display currency<input type="search" className={`${fieldClass} mt-1`} value={currencyQuery} onChange={(event) => setCurrencyQuery(event.target.value)} placeholder="Search currency or code" aria-label="Search display currencies" /><select className={`${fieldClass} mt-1`} value={currency} onChange={(event) => setCurrency(event.target.value)} aria-label="Display currency">{!CURRENCY_OPTIONS.some(([code]) => code === currency) && <option value={currency}>{currency} · detected</option>}{filteredCurrencies.map(([code, label]) => <option key={code} value={code}>{code} · {label}</option>)}</select></label>
       </div>
-      <p className="mb-5 text-[11px] text-neutral-500">Estimated location: {countryName} · {ratesReady || currency === 'NGN' ? `Converted approximately from NGN to ${currencyLabel}.` : 'Exchange rates unavailable; showing NGN.'}</p>
+      <p className="mb-5 text-[11px] text-neutral-500">Estimated location: {countryName} · {hasCurrencyRate ? `Converted approximately from NGN to ${currencyLabel}.` : `Exchange rates for ${currency} are unavailable; showing NGN.`}</p>
 
       {formOpen && user && (
         <div className="mb-6">
