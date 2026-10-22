@@ -109,7 +109,16 @@ Deno.serve(async (request: Request) => {
     const result = await aiResponse.json().catch(() => ({} as Record<string, unknown>));
     if (!aiResponse.ok) {
       console.error("AI provider request failed", aiResponse.status);
-      return json({ conversationId, error: "The AI Assistant is temporarily unavailable. Your message is ready to retry." }, 502);
+      const error = aiResponse.status === 401 || aiResponse.status === 403
+        ? "The AI provider rejected its credentials or model access. An administrator must check the OpenAI API key and model permissions."
+        : aiResponse.status === 429
+          ? "The AI provider quota or rate limit was reached. An administrator must check OpenAI billing and usage limits."
+          : aiResponse.status === 400 || aiResponse.status === 404
+            ? `The AI provider rejected the configured model or request (HTTP ${aiResponse.status}). An administrator must check the model configuration.`
+            : aiResponse.status >= 500
+              ? "The AI provider is temporarily unavailable. Your message is ready to retry."
+              : `The AI provider rejected the request (HTTP ${aiResponse.status}). An administrator must check the AI service configuration.`;
+      return json({ conversationId, error }, 502);
     }
     const choices = result.choices as { message?: { content?: string } }[] | undefined;
     const reply = choices?.[0]?.message?.content?.trim();
